@@ -56,6 +56,10 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, fig.width = 5
 set.seed(12345)
 ```
 
+```{r}
+library(coda)
+library(invgamma)
+```
 
 
 # 1 Daniel Bernoulli
@@ -168,7 +172,7 @@ tau2 <- function(y,n,mu){
 ## a
 
 ```{r}
-library(invgamma)
+
 n <-8
 mu <- 3.6
 tau <- tau2(income,n,mu)
@@ -203,13 +207,36 @@ eti <- quantile(gini,c(0.025,0.975))
 print(eti)
 ```
 
-The probability of the Gini coefficient being in this interval is 95 %. 
+The probability of the Gini coefficient being below or over this interval is 2.5%.
 
 ## d
 
 ```{r}
+gini_dens <- density(gini) 
+
+sort_dens <- sort(gini_dens$y,decreasing=TRUE)
+
+cdf <- cumsum(sort_dens)/sum(sort_dens)
+
+lower_index <- min(which(cdf >= 0.025))
+upper_index <- max(which(cdf <= 0.975))
+
+lower_value <- gini_dens$x[lower_index]
+upper_value <- gini_dens$x[upper_index]
+
+# HPDI Interval
+HPDI_interval <- c(lower_value, upper_value)
+
+HPDI_interval
+```
+
+```{r}
+df2 <- data.frame(rbind(HPDinterval(as.mcmc(gini),prob=0.95),eti))
+rownames(df2) <- c('HPDI', 'ETCI')
+knitr::kable(df2,caption = 'Comparison between the intervals')
 
 ```
+
 
 
 
