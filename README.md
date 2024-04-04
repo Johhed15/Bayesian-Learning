@@ -1,6 +1,22 @@
 # Bayesian Learning
 
-This repository contains the labs from the Bayesian course in my Master's program! 
+## This repository contains the labs from the Bayesian course in my Master's program! 
+
+<br>
+
+# Lab 1
+
+* Bernoulli, Log-Normal and von Mises distribution
+* Bayesian inference
+* Posterior draws, Odds, Gini index
+* HPDI and equal area credible interval
+
+
+# Lab 2
+
+# Lab 3 
+
+# Lab 4
 
 
 
