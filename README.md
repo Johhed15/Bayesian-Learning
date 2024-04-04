@@ -1,6 +1,6 @@
 # Bayesian Learning
 
-## This repository contains the labs from the Bayesian course in my Master's program! 
+## This repository contains the labs from the Bayesian course at the Statistics and ML master at Linköpings universitet!  
 
 <br>
 
