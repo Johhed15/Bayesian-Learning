@@ -177,11 +177,17 @@ n <-8
 mu <- 3.6
 tau <- tau2(income,n,mu)
 post_sigma <- rinvchisq(10000,n,tau)
+
+# kanske ska vara såhär 
+
+
+post_sigma <- n*tau/rchisq(10000,n)
+
 ```
 
 
 ```{r}
-plot(density(post_sigma))
+plot(density(post_sigma),xlim=c(0,1))
 
 ```
 
@@ -192,6 +198,7 @@ Most of our values for our $\sigma^2$ posterior are under 0.5.
 ```{r}
 gini <- 2*pnorm(mean=0,sd=1,sqrt(post_sigma)/sqrt(2)) -1
 ```
+
 
 ```{r}
 plot(density(gini))
@@ -218,16 +225,14 @@ sort_dens <- sort(gini_dens$y,decreasing=TRUE)
 
 cdf <- cumsum(sort_dens)/sum(sort_dens)
 
-lower_index <- min(which(cdf >= 0.025))
-upper_index <- max(which(cdf <= 0.975))
+cdf <- cdf[cdf<0.95]
 
-lower_value <- gini_dens$x[lower_index]
-upper_value <- gini_dens$x[upper_index]
+index <- gini_dens$x[order(gini_dens$y,decreasing=TRUE)][1:length(cdf)]
 
-# HPDI Interval
-HPDI_interval <- c(lower_value, upper_value)
-
-HPDI_interval
+min <- min(index)
+max <- max(index)
+min
+max
 ```
 
 ```{r}
@@ -236,6 +241,16 @@ rownames(df2) <- c('HPDI', 'ETCI')
 knitr::kable(df2,caption = 'Comparison between the intervals')
 
 ```
+
+```{r}
+
+plot(gini_dens, main='Gini-coef')
+abline(v=eti[1],col='green')
+abline(v=eti[2], col='green')
+abline(v=min,col='red')
+abline(v=max,col='red')
+```
+
 
 
 
