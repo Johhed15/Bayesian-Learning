@@ -62,7 +62,9 @@ library(invgamma)
 ```
 
 
-# 1 Daniel Bernoulli
+# Daniel Bernoulli
+
+Let $y_1,...,y_n|\theta \sim Bern(\theta)$, $s = 22, n = 70$. Assume $Beta(\alpha_0, \beta_0) \ \text{prior for} \ \theta$ and $\alpha_0 = \beta_0 = 8$.
 
 ```{r}
 
@@ -70,6 +72,7 @@ s <- 22 # successes
 f <- 70 - 22 # failures 
 n <- 70 # trials
 
+# Beta priors
 A0 <- 8
 B0 <- 8
 ```
@@ -77,13 +80,16 @@ B0 <- 8
 
 ## a
 
-$$\theta | y \sim Beta (\alpha_0 + s, \beta_0 +f)$$
+Draw 10000 random values from the posterior and verify graphically that the posterior mean and standard deviation converges to the true values as the number of draws grows larger.
 
+$$\text{Posterior}: \theta | y \sim Beta (\alpha_0 + s, \beta_0 +f)$$
 
-$$\text{True mean} = \frac{\alpha_0+s}{\alpha_0 + \beta_0 +n} $$
+Beta distribution has expected value $E[X] = \frac{\alpha}{\alpha+\beta}$ and variance $Var[X] = \frac{\alpha \beta}{(\alpha + \beta)^2+(\alpha+\beta+1)}$. Since we know the posterior we can deduce true mean and standard deviation to be the following;
 
-$$\text{True sd} = \sqrt{\frac{(\alpha_0 +s)\cdot (\beta_0+f)}{(\alpha_0 + \beta_0+n)^2(\alpha_0 + \beta_0+n +1 )}}$$
+$$\text{True posterior mean} = \frac{\alpha_0+s}{\alpha_0 + s + \beta_0 + f} = \frac{\alpha_0+s}{\alpha_0 + \beta_0 + n}$$
 
+$$\text{True posterior sd} = \sqrt{\frac{(\alpha_0 +s)\cdot (\beta_0+f)}{(\alpha_0 + \beta_0+n)^2(\alpha_0 + \beta_0+n +1 )}}$$
+* Draw 10000 random values from the posterior and calculate sample means & standard deviations as functions of accumulating number of drawn values
 ```{r}
 
 nDraws <- 10000 # nr of draws
@@ -97,31 +103,30 @@ posterior_sample <- rbeta(nDraws,A0+s,B0+f) # draw values from posterior
 sample_means <- cumsum(posterior_sample)/(1:nDraws)
 sample_sds <- sqrt(cumsum((posterior_sample - sample_means)^2) / (1:nDraws))
 
-
-
 ```
 
-
+* Verify graphically that the posterior mean converges
 ```{r}
 plot(sample_means,type='line',xlab='Ndraws',ylab='Sample mean', main='Graph over sampled means')
 abline(h=true_mean,col='red')
 ```
 
-We can see that the sample mean of $\theta$ is getting closer to the true mean posterior mean of $\theta$ after about 1000 draws but doesn't converge until after 2000 draws.
+There is a short burn-in of around 1000 draws before the sample mean of $\theta$ stabilizes and it converges to the true posterior mean after around 2000 draws.
 
-
+* Verify graphically that the posterior sd converges
 ```{r}
 plot(sample_sds,type='line',xlab='Ndraws',ylab='Sample sd', main='Graph over sampled sds')
 abline(h=true_sd,col='red')
 ```
 
-The sampled standard deviation gets closer to the true sd after about 1000 draws but doesn't fully converge to the true sd before 5000 draws. 
-
+The sample standard deviation of $\theta$ stabilizes after around 1000 draws but doesn't fully converge to the true posterior standard deviation until around 5000 draws.
 
 ## b
 
+Draw 10000 random values from the posterior and compute the posterior probability $Pr(\theta > 0.3|y)$ and compare with the exact value from the Beta posterior.
 
 ```{r}
+set.seed(12345)
 
 # draws from posterior
 post <- rbeta(nDraws, A0+s, B0+f)
@@ -139,29 +144,36 @@ knitr::kable(df)
 
 ```
 
-The approximate posterior probability of $\theta$ > 0.3 given y is 0.8207 which is close to the exact value from the beta posterior 0.83(rounded).
+The approximate posterior probability of $\theta$ > 0.3 given y is 0.8294 which is very close to the exact value from the beta posterior 0.8286. The exact probability is found with the conjugate as pbeta calculates $P(\theta \leq 0.3)$ whereas we are interested in $P(\theta > 0.3)$.
 
 ## c
 
+Draw 10000 random values from the posterior of the odds $\phi = \frac{\theta}{1-\theta}$ by using the previous random draws from the Beta posterior for $\theta$ and plot the posterior distribution of $\phi$.
 
 ```{r}
 odds <- post / (1- post)
 
 hist(odds)
 
+plot(density(post), main = "Density of post"); plot(density(odds), main = "Density of odds")
 ```
 
+The odds ratio transformation slightly skews the distribution to the right and the distribution is also wider with less density concentration around the mean.
 
-## kommentar ska in här
 
+# Log-normal distribution and the Gini coefficient.
 
-# 2 Log-normal distribution and the Gini coefficient.
+Assume that you have asked 8 randomly selected persons about their montlhy income (in thousands SEK) and obtained the observations below. A common model for non-negative continuous variables is the log-normal distribution $\log N(\mu, \sigma^2)$ has density function $$p\left(y \mid \mu, \sigma^2\right)=\frac{1}{y \cdot \sqrt{2 \pi \sigma^2}} \exp \left[-\frac{1}{2 \sigma^2}(\log y-\mu)^2\right]$$
 
+where $y > 0$, $-\infty < \mu < \infty$ and $\sigma^2 > 0$. Log-normal distribution is related to the normal distribution as: $$\text{if} \ y \sim \log N(\mu, \sigma^2) \ \text{then} \ \log y \sim N(\mu, \sigma^2) $$ 
+
+Let $y$ be log-normal distributed where $\mu = 3.6$ is assumed to be known but variance $\sigma^2$ is unknown with non-informative prior $p(\sigma^2) \propto 1/\sigma^2$. The posterior for $\sigma^2$ is the $Inv - \chi^2(n,\tau^2)$ where $$\tau^2 = \frac{\sum^n_{i=1} (\log y_i-\mu)^2}{n}$$
 
 ```{r}
 
-income <- c(33,24,48,32,55,74,23,17)
+income <- c(33,24,48,32,55,74,23,17) # observated incomes
 
+# tau distribution
 tau2 <- function(y,n,mu){
   
   sum((log(y)-mu)^2)/n
@@ -170,72 +182,93 @@ tau2 <- function(y,n,mu){
 
 
 ## a
+Draw 10000 random values from the posterior of $\sigma^2$ by assuming $\mu = 3.6$ and plot the posterior distribution.
 
 ```{r}
 
-n <-8
+n <- 8 # amount of observed incomes
 mu <- 3.6
+
 tau <- tau2(income,n,mu)
 post_sigma <- rinvchisq(10000,n,tau)
 
+
 # kanske ska vara såhär 
+post_sigma1 <- n*tau/rchisq(10000,n)
 
-
-post_sigma <- n*tau/rchisq(10000,n)
+# enligt wiki, E[X] = 1/(v-2) för v > 2
+# v = df
+# v = 1/(3.6) + 2?
 
 ```
 
 
 ```{r}
-plot(density(post_sigma),xlim=c(0,1))
+plot(density(post_sigma),main = "rinvchisq density",xlim=c(0,1)); plot(density(post_sigma1),main="n*tau/rchisq density",xlim=c(0,1))
 
 ```
 
-Most of our values for our $\sigma^2$ posterior are under 0.5.
+**tolkning**
+
 
 ## b
 
+Most common measure of income inequality is Gini coefficient, $0 < G < 1$, where $G = 0$ is a completely equal income distribution and $G=1$ completely inequal. It can be shown that,
+
+$$G= 2 \Phi (\sigma / \sqrt{2})-1 \ \text{when income is distributed} \ \log N(\mu, \sigma^2)$$
+$\Phi(z)$ is the cdf for the standard normal distribution with mean zero and unit variance. Use the posterior draws in a) to compute the posterior distribution of the Gini coefficient $G$ for the current data.
+
+
 ```{r}
-gini <- 2*pnorm(mean=0,sd=1,sqrt(post_sigma)/sqrt(2)) -1
+gini <- 2*pnorm(q=sqrt(post_sigma)/sqrt(2), mean=0, sd=1) -1
 ```
 
 
 ```{r}
-plot(density(gini))
+plot(density(gini), main = "Gini coefficient posterior distribution")
 ```
 
 
 
 ## c
 
-```{r}
-eti <- quantile(gini,c(0.025,0.975))
+Use the posterior draws from b) to compute a 95% equal tail credible interval for $G$. A 95% equal tail credible interval $(a,b)$ cuts of $2.5%$ of the posterior probability mass to the left of $a$, and to the right of $b$.
 
-print(eti)
+```{r}
+#eti <- quantile(gini,c(0.025,0.975))
+
+#print(eti)
+
+eti1 <- data.frame(mean(gini) - 1.96 * sd(gini), mean(gini) + 1.96 * sd(gini))
+knitr::kable(eti1, col.names = c("2.5%", "97.5"))
 ```
 
-The probability of the Gini coefficient being below or over this interval is 2.5%.
+This interval shows the probability of the Gini coefficient $G$ being outside of this interval as 2.5% per side, or 5% in total.
 
 ## d
+Use the posterior draws from b) to compute a 95% HPDI for $G$. Compare the two intervals in c) and d). 
 
 ```{r}
-gini_dens <- density(gini) 
+set.seed(12345)
+gini_dens <- density(gini) # kernel density estimate of G posterior
 
-sort_dens <- sort(gini_dens$y,decreasing=TRUE)
+sort_dens <- sort(gini_dens$y,decreasing=TRUE) # order the estimated density values
 
-cdf <- cumsum(sort_dens)/sum(sort_dens)
+cdf <- cumsum(sort_dens)/sum(sort_dens) # cdf of sorted G posterior
 
 cdf <- cdf[cdf<0.95]
 
-index <- gini_dens$x[order(gini_dens$y,decreasing=TRUE)][1:length(cdf)]
+index <- gini_dens$x[order(gini_dens$y,decreasing=TRUE)][1:length(cdf)] # subset the coordinates of points with highest pdf for 95% of cdf
 
-min <- min(index)
-max <- max(index)
-min
-max
+vals <- data.frame("min" = min(index), "max" = max(index))
+knitr::kable(vals, col.names = c("min", "max"))
 ```
 
-```{r}
+The above values show the min and max values for the HPDI, i.e. the interval for $\theta$-values with the highest pdf.
+
+
+```{r, eval = FALSE, echo = FALSE}
+set.seed(12345)
 df2 <- data.frame(rbind(HPDinterval(as.mcmc(gini),prob=0.95),eti))
 rownames(df2) <- c('HPDI', 'ETCI')
 knitr::kable(df2,caption = 'Comparison between the intervals')
@@ -243,22 +276,75 @@ knitr::kable(df2,caption = 'Comparison between the intervals')
 ```
 
 ```{r}
+df2 <- data.frame(cbind(t(vals), t(eti1)))
+colnames(df2) <- c('HPDI', 'ETCI')
+rownames(df2) <- c("Lower", "Upper")
+knitr::kable(df2,caption = 'Comparison between the intervals')
 
-plot(gini_dens, main='Gini-coef')
-abline(v=eti[1],col='green')
-abline(v=eti[2], col='green')
-abline(v=min,col='red')
-abline(v=max,col='red')
+```
+
+```{r}
+
+plot(gini_dens, main='Gini-coef', xlim = c(0,0.5))
+abline(v=eti1[1],col='green')
+abline(v=eti1[2], col='green')
+abline(v=vals[1],col='red')
+abline(v=vals[2],col='red')
+```
+
+The table and figure above indicate the differences between the intervals. In the plot, the green lines show the 95% CI and the red lines the HPDI. The highest density for both are very similar, but the lower interval is where the HPDI is quite narrower towards the mean.
+
+
+
+# Bayesian inference for the concentration parameter in the von Mises distribution
+
+This exercise is concerned with directional data and the point is to show that the posterior distribution for somewhat weird models can be obtained by plotting it over a grid of values. The data points are observed wind direction at a given location on ten different days and are recorded in degrees as the following,
+
+```{r}
+deg <- c(20, 314, 285, 40, 308, 314, 299, 296, 303, 326)
+```
+
+North is located at zero degrees. According to Wikipedias description of probability distributions for circular data we convert the data into radian $- \pi \leq y \leq \pi$. The observations in radians are,
+
+```{r}
+rads <- c(-2.79, 2.33, 1.83, -2.44, 2.23, 2.33, 2.07, 2.02, 2.14, 2.54)
+```
+
+Assume that these data points conditional on $(\mu, \kappa)$ are independent observations from the following
+
+$$\text{von Mises distribution}: p(y \mid \mu, \kappa)=\frac{\exp [\kappa \cdot \cos (y-\mu)]}{2 \pi I_0(\kappa)},-\pi \leq y \leq \pi$$
+where $I_0(\kappa)$ is the modified Bessel function of the first kind of order zero (?besselI in R). The parameter $\mu (-\pi < \mu < \pi)$ is the mean direction and $\kappa > 0$ is called the concentration parameter. Large $\kappa$ gives a small variance around $\mu$, and vice versa. Assume that $\mu$ is known to be 2.4. Let $\kappa \sim Exponential(\gamma = 0.5)$ a priori, where $\gamma$ is the rate parameter of the exponential distribution (so that the mean is $1/\gamma$).
+
+## a) 
+
+Derive the expression for what the posterior $p(\kappa | y, \mu)$ is proportional to. Hence, derive the function $f(\kappa)$ such that $p(\kappa |y, \mu) \propto f(\kappa)$. Then, plot the posterior distribution of $\kappa$ for the wind ddirection data over a find grid of $\kappa$ values.
+
+* Data points conditional on $\mu, \kappa$ are independent observations from the von Mises distribution
+```{r}
+vonMises <- function(mu, k, y){
+  
+  exp(k * cos(y-mu)) / 2*pi*besselI(y, 0)
+  
+}
+```
+
+```{r}
+
+n <- 10
+mu <- 2.4
+k <- rexp(n, 0.5)
+
+likelihood <- vonMises(mu, k, rads)
+
+# Vad är priorn?
 ```
 
 
+* Derive the function $f(\kappa)$ such that its proportional to the posterior
 
 
 
 
 
-# 3  Bayesian inference for the concentration parameter in the von Mises distribution
 
-## a
 
-## b
