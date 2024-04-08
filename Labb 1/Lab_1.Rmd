@@ -190,11 +190,11 @@ n <- 8 # amount of observed incomes
 mu <- 3.6
 
 tau <- tau2(income,n,mu)
-post_sigma <- rinvchisq(10000,n,tau)
+#post_sigma <- rinvchisq(10000,n,tau)
 
 
 # kanske ska vara såhär 
-post_sigma1 <- n*tau/rchisq(10000,n)
+post_sigma <- n*tau/rchisq(10000,n)
 
 # enligt wiki, E[X] = 1/(v-2) för v > 2
 # v = df
@@ -204,7 +204,7 @@ post_sigma1 <- n*tau/rchisq(10000,n)
 
 
 ```{r}
-plot(density(post_sigma),main = "rinvchisq density",xlim=c(0,1)); plot(density(post_sigma1),main="n*tau/rchisq density",xlim=c(0,1))
+plot(density(post_sigma),main="n*tau/rchisq density",xlim=c(0,1))
 
 ```
 
@@ -235,12 +235,12 @@ plot(density(gini), main = "Gini coefficient posterior distribution")
 Use the posterior draws from b) to compute a 95% equal tail credible interval for $G$. A 95% equal tail credible interval $(a,b)$ cuts of $2.5%$ of the posterior probability mass to the left of $a$, and to the right of $b$.
 
 ```{r}
-#eti <- quantile(gini,c(0.025,0.975))
+eti <- quantile(gini,c(0.025,0.975))
 
 #print(eti)
 
-eti1 <- data.frame(mean(gini) - 1.96 * sd(gini), mean(gini) + 1.96 * sd(gini))
-knitr::kable(eti1, col.names = c("2.5%", "97.5"))
+#eti1 <- data.frame(mean(gini) - 1.96 * sd(gini), mean(gini) + 1.96 * sd(gini))
+knitr::kable(eti,col.names = 'Interval')
 ```
 
 This interval shows the probability of the Gini coefficient $G$ being outside of this interval as 2.5% per side, or 5% in total.
@@ -267,27 +267,21 @@ knitr::kable(vals, col.names = c("min", "max"))
 The above values show the min and max values for the HPDI, i.e. the interval for $\theta$-values with the highest pdf.
 
 
-```{r, eval = FALSE, echo = FALSE}
+```{r}
 set.seed(12345)
-df2 <- data.frame(rbind(HPDinterval(as.mcmc(gini),prob=0.95),eti))
+df2 <- data.frame(rbind(vals,eti))
 rownames(df2) <- c('HPDI', 'ETCI')
 knitr::kable(df2,caption = 'Comparison between the intervals')
 
 ```
 
-```{r}
-df2 <- data.frame(cbind(t(vals), t(eti1)))
-colnames(df2) <- c('HPDI', 'ETCI')
-rownames(df2) <- c("Lower", "Upper")
-knitr::kable(df2,caption = 'Comparison between the intervals')
 
-```
 
 ```{r}
 
-plot(gini_dens, main='Gini-coef', xlim = c(0,0.5))
-abline(v=eti1[1],col='green')
-abline(v=eti1[2], col='green')
+plot(gini_dens, main='Gini-coef', xlim = c(0,0.8))
+abline(v=eti[1],col='green')
+abline(v=eti[2], col='green')
 abline(v=vals[1],col='red')
 abline(v=vals[2],col='red')
 ```
@@ -307,7 +301,10 @@ deg <- c(20, 314, 285, 40, 308, 314, 299, 296, 303, 326)
 North is located at zero degrees. According to Wikipedias description of probability distributions for circular data we convert the data into radian $- \pi \leq y \leq \pi$. The observations in radians are,
 
 ```{r}
-rads <- c(-2.79, 2.33, 1.83, -2.44, 2.23, 2.33, 2.07, 2.02, 2.14, 2.54)
+
+y <- c(-2.79, 2.33, 1.83, -2.44, 2.23, 2.33, 2.07, 2.02, 2.14, 2.54)
+
+
 ```
 
 Assume that these data points conditional on $(\mu, \kappa)$ are independent observations from the following
@@ -320,31 +317,86 @@ where $I_0(\kappa)$ is the modified Bessel function of the first kind of order z
 Derive the expression for what the posterior $p(\kappa | y, \mu)$ is proportional to. Hence, derive the function $f(\kappa)$ such that $p(\kappa |y, \mu) \propto f(\kappa)$. Then, plot the posterior distribution of $\kappa$ for the wind ddirection data over a find grid of $\kappa$ values.
 
 * Data points conditional on $\mu, \kappa$ are independent observations from the von Mises distribution
+
+
+
+
+
+
+$$p(y \mid \mu, \kappa)=\prod_{i=1}^{n}{ \frac{\exp [\kappa \cdot \cos (y-\mu)]}{2 \pi I_0(\kappa)}}$$
+
+
+$$\frac{1}{(2 \pi I_0(\kappa))^n}\cdot \exp(\kappa \cdot\sum^n_{i=1} \cos (y-\mu))$$
+
+$$\frac{1}{(2 \pi)^n}\cdot \frac{1}{(I_0(\kappa))^n}\cdot \exp (\kappa \cdot \sum^n_{i=1}\cos (y-\mu))$$
+
+$$\text{This is a constant and can therfore be ignored} = \frac{1}{2 \pi}$$
+
+
+$$\text{Likelihood = }\frac{ \exp (\kappa \cdot \sum^n_{i=1} \cos (y-\mu))}{(I_0(\kappa))^n}\cdot$$
+
+
+$$\text{Posterior}= \ p(y \mid \mu, \kappa) \cdot p(K) = \frac{ \exp (\kappa \cdot \sum^n\cos (y-\mu))}{(I_0(\kappa))^n} \cdot p(K) $$
+
+$$\text{Posterior}= \ p(y \mid \mu, \kappa) \cdot p(K) = \frac{ \exp (\kappa \cdot( \sum^n\cos (y-\mu))-0.5)}{(I_0(\kappa))^n} $$
+
+
+
 ```{r}
+
 vonMises <- function(mu, k, y){
   
-  exp(k * cos(y-mu)) / 2*pi*besselI(y, 0)
+  prod(exp(k * cos(y-mu)) / (2*pi*besselI(k, 0))) # det var y istället för k i besselI(därför vi fick Nans)
   
 }
+
+
 ```
+
+
 
 ```{r}
 
+k=0.5
 n <- 10
 mu <- 2.4
-k <- rexp(n, 0.5)
 
-likelihood <- vonMises(mu, k, rads)
+posterior <- function(k){
+   
+  exp(k * (sum(cos(y-mu)))-0.5)/ (besselI(k, 0)^n)
+  
+}
 
-# Vad är priorn?
+# applying a grid of k values for the posterior function
+posterior_3 <- sapply(seq(0.01,10,length.out=1000),posterior)
+
+norm <- posterior_3/sum(posterior_3)
+
+length(posterior_3)
+
+plot(seq(0.01,10,length.out=1000),norm, type='l')
+```
+
+
+
+
+```{r}
+
 ```
 
 
 * Derive the function $f(\kappa)$ such that its proportional to the posterior
 
 
+## b 
+
+Find the (approximate) posterior mode of k from the information in a).
 
 
+
+```{r}
+
+```
 
 
 
