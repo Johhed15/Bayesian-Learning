@@ -320,6 +320,7 @@ Derive the expression for what the posterior $p(\kappa | y, \mu)$ is proportiona
 
 
 
+* Derive the function $f(\kappa)$ such that its proportional to the posterior
 
 
 
@@ -330,7 +331,7 @@ $$\frac{1}{(2 \pi I_0(\kappa))^n}\cdot \exp(\kappa \cdot\sum^n_{i=1} \cos (y-\mu
 
 $$\frac{1}{(2 \pi)^n}\cdot \frac{1}{(I_0(\kappa))^n}\cdot \exp (\kappa \cdot \sum^n_{i=1}\cos (y-\mu))$$
 
-$$\text{This is a constant and can therfore be ignored} = \frac{1}{2 \pi}$$
+$$\text{This is a constant and can therfore be ignored} = \frac{1}{(2 \pi)^2}$$
 
 
 $$\text{Likelihood = }\frac{ \exp (\kappa \cdot \sum^n_{i=1} \cos (y-\mu))}{(I_0(\kappa))^n}\cdot$$
@@ -385,7 +386,6 @@ plot(seq(0.01,10,length.out=1000),norm, type='l')
 ```
 
 
-* Derive the function $f(\kappa)$ such that its proportional to the posterior
 
 
 ## b 
