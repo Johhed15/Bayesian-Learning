@@ -113,6 +113,7 @@ abline(h=true_mean,col='red')
 
 There is a short burn-in of around 1000 draws before the sample mean of $\theta$ stabilizes and it converges to the true posterior mean after around 2000 draws.
 
+\pagebreak
 * Verify graphically that the posterior sd converges
 ```{r}
 plot(sample_sds,type='line',xlab='Ndraws',ylab='Sample sd', main='Graph over sampled sds')
@@ -155,12 +156,12 @@ odds <- post / (1- post)
 
 hist(odds)
 
-plot(density(post), main = "Density of post"); plot(density(odds), main = "Density of odds")
+plot(density(post), main = "Density of posterior"); plot(density(odds), main = "Density of odds posterior")
 ```
 
 The odds ratio transformation slightly skews the distribution to the right and the distribution is also wider with less density concentration around the mean.
 
-
+\pagebreak
 # Log-normal distribution and the Gini coefficient.
 
 Assume that you have asked 8 randomly selected persons about their montlhy income (in thousands SEK) and obtained the observations below. A common model for non-negative continuous variables is the log-normal distribution $\log N(\mu, \sigma^2)$ has density function $$p\left(y \mid \mu, \sigma^2\right)=\frac{1}{y \cdot \sqrt{2 \pi \sigma^2}} \exp \left[-\frac{1}{2 \sigma^2}(\log y-\mu)^2\right]$$
@@ -181,34 +182,30 @@ tau2 <- function(y,n,mu){
 ```
 
 
+
 ## a
 Draw 10000 random values from the posterior of $\sigma^2$ by assuming $\mu = 3.6$ and plot the posterior distribution.
+
+$\text{Posterior} \ \sigma^2 = \frac{n \cdot \tau^2}{X} \ \text{where} \ X \sim \chi^2(n)$ due to $\tau^2$ having $n$ degrees of freedom.
 
 ```{r}
 
 n <- 8 # amount of observed incomes
 mu <- 3.6
 
-tau <- tau2(income,n,mu)
-#post_sigma <- rinvchisq(10000,n,tau)
+tau <- tau2(income,n,mu) # tau calculated using mu
 
-
-# kanske ska vara såhär 
 post_sigma <- n*tau/rchisq(10000,n)
-
-# enligt wiki, E[X] = 1/(v-2) för v > 2
-# v = df
-# v = 1/(3.6) + 2?
 
 ```
 
 
 ```{r}
-plot(density(post_sigma),main="n*tau/rchisq density",xlim=c(0,1))
+plot(density(post_sigma),main="Posterior sigma density",xlim=c(0,1))
 
 ```
 
-**tolkning**
+Posterior $\sigma^2$ has a right skewed density with mode at slightly below 0.2.
 
 
 ## b
@@ -221,14 +218,11 @@ $\Phi(z)$ is the cdf for the standard normal distribution with mean zero and uni
 
 ```{r}
 gini <- 2*pnorm(q=sqrt(post_sigma)/sqrt(2), mean=0, sd=1) -1
-```
 
-
-```{r}
 plot(density(gini), main = "Gini coefficient posterior distribution")
 ```
 
-
+The Gini distribution has a slight right skewed income with a mode at around 0.25. This indicates that income is distributed rather equally for the subjects but a low amount making substantially more than the others. 
 
 ## c
 
@@ -237,13 +231,10 @@ Use the posterior draws from b) to compute a 95% equal tail credible interval fo
 ```{r}
 eti <- quantile(gini,c(0.025,0.975))
 
-#print(eti)
-
-#eti1 <- data.frame(mean(gini) - 1.96 * sd(gini), mean(gini) + 1.96 * sd(gini))
 knitr::kable(eti,col.names = 'Interval')
 ```
 
-This interval shows the probability of the Gini coefficient $G$ being outside of this interval as 2.5% per side, or 5% in total.
+This interval shows the probability of the Gini coefficient $G$ being outside of this interval as 2.5% per side, or 5% in total. The equal tail show the same density outside the interval on both sides.
 
 ## d
 Use the posterior draws from b) to compute a 95% HPDI for $G$. Compare the two intervals in c) and d). 
@@ -256,9 +247,10 @@ sort_dens <- sort(gini_dens$y,decreasing=TRUE) # order the estimated density val
 
 cdf <- cumsum(sort_dens)/sum(sort_dens) # cdf of sorted G posterior
 
-cdf <- cdf[cdf<0.95]
+cdf <- cdf[cdf<0.95] # 95% of the cdf
 
-index <- gini_dens$x[order(gini_dens$y,decreasing=TRUE)][1:length(cdf)] # subset the coordinates of points with highest pdf for 95% of cdf
+# subset the coordinates of points with highest pdf for 95% of cdf
+index <- gini_dens$x[order(gini_dens$y,decreasing=TRUE)][1:length(cdf)] 
 
 vals <- data.frame("min" = min(index), "max" = max(index))
 knitr::kable(vals, col.names = c("min", "max"))
@@ -266,7 +258,7 @@ knitr::kable(vals, col.names = c("min", "max"))
 
 The above values show the min and max values for the HPDI, i.e. the interval for $\theta$-values with the highest pdf.
 
-
+\pagebreak
 ```{r}
 set.seed(12345)
 df2 <- data.frame(rbind(vals,eti))
@@ -274,7 +266,6 @@ rownames(df2) <- c('HPDI', 'ETCI')
 knitr::kable(df2,caption = 'Comparison between the intervals')
 
 ```
-
 
 
 ```{r}
@@ -286,7 +277,7 @@ abline(v=vals[1],col='red')
 abline(v=vals[2],col='red')
 ```
 
-The table and figure above indicate the differences between the intervals. In the plot, the green lines show the 95% CI and the red lines the HPDI. The highest density for both are very similar, but the lower interval is where the HPDI is quite narrower towards the mean.
+The table and figure above indicate the differences between the intervals. In the plot, the green lines show the 95% EQTI and the red lines the HPDI. The HPDI is slightly narrower than the EQTI, and is also located more to the left. In the figure this is visualized clearly, and the resulting gain of density is also shown. Whereas the EQTI disregards alot of density on the lower side of the distribution, the HPDI picks this up for a smaller loss of density at the higher side.
 
 
 
@@ -314,14 +305,7 @@ where $I_0(\kappa)$ is the modified Bessel function of the first kind of order z
 
 ## a) 
 
-Derive the expression for what the posterior $p(\kappa | y, \mu)$ is proportional to. Hence, derive the function $f(\kappa)$ such that $p(\kappa |y, \mu) \propto f(\kappa)$. Then, plot the posterior distribution of $\kappa$ for the wind ddirection data over a find grid of $\kappa$ values.
-
-* Data points conditional on $\mu, \kappa$ are independent observations from the von Mises distribution
-
-
-
-* Derive the function $f(\kappa)$ such that its proportional to the posterior
-
+Derive the expression for what the posterior $p(\kappa | y, \mu)$ is proportional to. Hence, derive the function $f(\kappa)$ such that $p(\kappa |y, \mu) \propto f(\kappa)$. Then, plot the posterior distribution of $\kappa$ for the wind direction data over a fine grid of $\kappa$ values.
 
 
 $$p(y \mid \mu, \kappa)=\prod_{i=1}^{n}{ \frac{\exp [\kappa \cdot \cos (y-\mu)]}{2 \pi I_0(\kappa)}}$$
@@ -331,72 +315,74 @@ $$\frac{1}{(2 \pi I_0(\kappa))^n}\cdot \exp(\kappa \cdot\sum^n_{i=1} \cos (y-\mu
 
 $$\frac{1}{(2 \pi)^n}\cdot \frac{1}{(I_0(\kappa))^n}\cdot \exp (\kappa \cdot \sum^n_{i=1}\cos (y-\mu))$$
 
-$$\text{This is a constant and can therfore be ignored} = \frac{1}{(2 \pi)^2}$$
+$$\text{This is a constant and can therfore be ignored} = \frac{1}{(2 \pi)^n}$$
 
 
 $$\text{Likelihood = }\frac{ \exp (\kappa \cdot \sum^n_{i=1} \cos (y-\mu))}{(I_0(\kappa))^n}\cdot$$
 
-
-$$\text{Posterior}= \ p(y \mid \mu, \kappa) \cdot p(K) = \frac{ \exp (\kappa \cdot \sum^n\cos (y-\mu))}{(I_0(\kappa))^n} \cdot p(K) $$
-
-$$\text{Posterior}= \ p(y \mid \mu, \kappa) \cdot p(K) = \frac{ \exp (\kappa \cdot( \sum^n\cos (y-\mu))-0.5)}{(I_0(\kappa))^n} $$
+$$\text{A priori,} \  \kappa \sim Exp(\gamma=0.5) \implies \text{Prior}=p(\kappa) \propto \lambda e ^{-\lambda \kappa} = 0.5e^{0.5 \kappa}$$
 
 
+$$\text{Posterior}= p(\kappa \mid y, \mu) \propto p(y \mid \mu, \kappa) \cdot p(\kappa) = \frac{ \exp (\kappa \cdot \sum^n\cos (y-\mu))}{(I_0(\kappa))^n} \cdot \lambda e ^{-\lambda \kappa}$$
+$\lambda = 0.5$ is a constant and can be ignored.
 
+$$\text{Posterior}= p(\kappa \mid y, \mu) \propto p(y \mid \mu, \kappa) \cdot p(\kappa) = \frac{ \exp (\kappa \cdot \sum^n\cos (y-\mu))  \cdot exp{(- \lambda \kappa)}}{(I_0(\kappa))^n}$$
+Following rules for multiplying exponentials
+
+$$p(\kappa \mid y, \mu) \propto p(y \mid \mu, \kappa) \cdot p(\kappa) = \frac{ \exp (\kappa \cdot \sum^n\cos (y-\mu) - \lambda \kappa)}{(I_0(\kappa))^n}$$
+Below we calculate the Posterior $\propto f(\kappa)$.
 ```{r}
-
-vonMises <- function(mu, k, y){
-  
-  prod(exp(k * cos(y-mu)) / (2*pi*besselI(k, 0))) # det var y istället för k i besselI(därför vi fick Nans)
-  
-}
-
-
-```
-
-
-
-```{r}
-
-k=0.5
+k <- 0.5
 n <- 10
 mu <- 2.4
 
 posterior <- function(k){
    
-  exp(k * (sum(cos(y-mu)))-0.5)/ (besselI(k, 0)^n)
+  exp(k * (sum(cos(y-mu)))-k)/ (besselI(k, 0)^n)
   
 }
+```
 
+\pagebreak
+* Plotting the posterior distribution over a fine grid
+
+```{r}
 # applying a grid of k values for the posterior function
 posterior_3 <- sapply(seq(0.01,10,length.out=1000),posterior)
 
 norm <- posterior_3/sum(posterior_3)
-
-length(posterior_3)
-
 plot(seq(0.01,10,length.out=1000),norm, type='l')
 ```
-
-
-
-
-```{r}
-
-```
-
-
-
 
 ## b 
 
 Find the (approximate) posterior mode of k from the information in a).
 
 
-
+* The fastest way to do this is by finding index for where the posterior density vector is maximized
 ```{r}
-
+which.max(norm);norm[which.max(norm)]
 ```
 
+At element 217 the posterior density is the highest at 0.004603008, which we use to find the maximum (i.e. mode) value of the [0,10] sequence.
 
+```{r}
+seq(0,10,length.out=1000)[which.max(norm)]
+```
+This is the approximative posterior mode of $\kappa$. If the sequenced numbers would increase the approximate value would be closer to true convergence.
+
+
+```{r}
+plot(seq(0.01,10,length.out=1000),norm, type='l')
+abline(v=(seq(0,10,length.out=1000)[which.max(norm)]), col = "red")
+```
+
+This graph confirms that the value found of 2.162162 is the approximate posterior mode of $\kappa$.
+
+
+
+\pagebreak
+# Appendix
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
 
