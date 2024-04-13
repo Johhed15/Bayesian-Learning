@@ -283,20 +283,9 @@ The table and figure above indicate the differences between the intervals. In th
 
 # Bayesian inference for the concentration parameter in the von Mises distribution
 
-This exercise is concerned with directional data and the point is to show that the posterior distribution for somewhat weird models can be obtained by plotting it over a grid of values. The data points are observed wind direction at a given location on ten different days and are recorded in degrees as the following,
+This exercise is concerned with directional data and the point is to show that the posterior distribution for somewhat weird models can be obtained by plotting it over a grid of values. The data points are observed wind direction at a given location on ten different days and are recorded in degrees as $20, 314, 285, 40, 308, 314, 299, 296, 303, 326$.
 
-```{r}
-deg <- c(20, 314, 285, 40, 308, 314, 299, 296, 303, 326)
-```
-
-North is located at zero degrees. According to Wikipedias description of probability distributions for circular data we convert the data into radian $- \pi \leq y \leq \pi$. The observations in radians are,
-
-```{r}
-
-y <- c(-2.79, 2.33, 1.83, -2.44, 2.23, 2.33, 2.07, 2.02, 2.14, 2.54)
-
-
-```
+North is located at zero degrees. According to Wikipedias description of probability distributions for circular data we convert the data into radian $- \pi \leq y \leq \pi$. The observations in radians are $-2.79, 2.33, 1.83, -2.44, 2.23, 2.33, 2.07, 2.02, 2.14, 2.54$
 
 Assume that these data points conditional on $(\mu, \kappa)$ are independent observations from the following
 
@@ -332,13 +321,15 @@ Following rules for multiplying exponentials
 $$p(\kappa \mid y, \mu) \propto p(y \mid \mu, \kappa) \cdot p(\kappa) = \frac{ \exp (\kappa \cdot \sum^n\cos (y-\mu) - \lambda \kappa)}{(I_0(\kappa))^n}$$
 Below we calculate the Posterior $\propto f(\kappa)$.
 ```{r}
-k <- 0.5
+y <- c(-2.79, 2.33, 1.83, -2.44, 2.23, 2.33, 2.07, 2.02, 2.14, 2.54)
+lambda <- 0.5
 n <- 10
 mu <- 2.4
 
+
 posterior <- function(k){
    
-  exp(k * (sum(cos(y-mu)))-k)/ (besselI(k, 0)^n)
+  exp(k * (sum(cos(y-mu)))-k*lambda)/ (besselI(k, 0)^n)
   
 }
 ```
@@ -354,6 +345,8 @@ norm <- posterior_3/sum(posterior_3)
 plot(seq(0.01,10,length.out=1000),norm, type='l')
 ```
 
+The posterior is right skewed and has a high density between around 2-4.
+
 ## b 
 
 Find the (approximate) posterior mode of k from the information in a).
@@ -364,12 +357,13 @@ Find the (approximate) posterior mode of k from the information in a).
 which.max(norm);norm[which.max(norm)]
 ```
 
-At element 217 the posterior density is the highest at 0.004603008, which we use to find the maximum (i.e. mode) value of the [0,10] sequence.
+At element 259 the posterior density has value 0.003886893, which we use to find the maximum (i.e. mode) value of the [0,10] sequence.
 
 ```{r}
 seq(0,10,length.out=1000)[which.max(norm)]
 ```
-This is the approximative posterior mode of $\kappa$. If the sequenced numbers would increase the approximate value would be closer to true convergence.
+
+The approximate posterior mode of $\kappa$ is 2.582583. If the sequenced numbers would increase the approximate value would be closer to true convergence.
 
 
 ```{r}
