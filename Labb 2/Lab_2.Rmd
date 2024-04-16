@@ -1,0 +1,169 @@
+---
+title: "Computer lab 2"
+date: "`r Sys.Date()`"
+author: "Johannes Hedström & Mikael Montén "
+output:
+  pdf_document:
+    latex_engine: xelatex
+    fig_caption: yes
+    number_sections: yes
+  html_document:
+    df_print: paged
+geometry: top=100pt,bottom=100pt,left=68pt,right=66pt
+header-includes:
+- \usepackage{float}
+- \usepackage{longtable}
+- \usepackage{caption}
+- \usepackage{fancyhdr}
+- \usepackage{titling}
+- \renewcommand{\headrulewidth}{0pt}
+- \renewcommand{\and}{\\}
+- \pretitle{\centering\vspace{0cm}{732A73 Bayesian Learning \par}\vspace{5cm}\Huge\textbf}
+- \posttitle{\vspace{1cm}\large\textbf{}\par}
+- \preauthor{\centering\vspace{4cm}\normalsize}
+- \postauthor{\par\vspace{2cm}}
+- \predate{\centering{\normalsize STIMA \\
+  Department of Computer and Information Science \\ Linköpings universitet \par}}
+- \postdate{\par\vspace{0cm}}
+- \raggedbottom
+---
+
+
+<!-- page number pos -->
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+\pagestyle{fancy}
+
+<!-- no page nr on first page  -->
+\pagenumbering{gobble}
+
+<!-- Anger sidbrytning -->
+\clearpage
+
+<!-- creating the table of contents -->
+\setcounter{tocdepth}{3}
+\tableofcontents
+
+<!-- new page -->
+\clearpage
+
+<!-- starting the count on 1 after the contents -->
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, fig.width = 5, fig.height = 3, fig.align = 'center')
+set.seed(12345)
+```
+
+```{r}
+library(coda)
+library(readxl)
+library(mvtnorm)
+library(tidyr)
+```
+
+
+```{r}
+# loading the data
+lin <- read_excel("Linkoping2022.xlsx")
+
+women <- read.table('WomenAtWork.dat', header=TRUE)
+
+```
+
+
+
+# Linear and polynomial regression
+
+The dataset Linkoping2022.xlsx contains daily average temperatures (in degree Celcius) in Linköping over the course of the year 2022. Use the function read_xlsx(),
+which is included in the R package readxl (install.packages("readxl")), to import the dataset in R. The response variable is temp and the covariate time that you need
+to create yourself is defned by
+
+$$time = \frac{\text{the number of days since the beginning of the year}}{\text{365}}$$
+
+A Bayesian analysis of the following quadratic regression model is to be performed:
+
+$$temp = \beta_0 + \beta_1 \cdot time + \beta_2 \cdot time^2 + \epsilon , \space\space \epsilon \overset{iid}{\sim}  N(0,\sigma ^2)$$
+```{r}
+# creating the time variable
+lin$time <- as.numeric((as.Date(lin$datetime) - as.Date("2022-01-01"))/365)
+```
+
+## a
+
+Use the conjugate prior for the linear regression model. The prior hyperparameters $\mu_0$, $\Omega _0$, $v_0$ and $\sigma^2_0$ shall be set to sensible values. Start with
+$\mu_0= (0, 100, −100)T, \Omega_0 = 0.01 \cdot I_3, v_0 = 1$ and $\sigma_0^2 =1$. Check if this prior agrees with your prior opinions by simulating draws from the joint prior
+of all parameters and for every draw compute the regression curve. This gives a collection of regression curves; one for each draw from the prior. Does the
+collection of curves look reasonable? If not, change the prior hyperparameters until the collection of prior regression curves agrees with your prior beliefs
+about the regression curve. [Hint: R package mvtnorm can be used and your $Inv  \sim \chi^2$ simulator of random draws from Lab 1.]
+
+
+```{r}
+set.seed(123456789)
+# creating the variables
+mu0 <- t(c(0,100,-100))
+omega0 <- diag(1, nrow=3,ncol=3)
+v0 <- 150
+sigma0 <- 1
+n <- nrow(lin)
+
+beta <- matrix(ncol=3, nrow=1000)
+sigma <- matrix(ncol=1, nrow=1000)
+for (i in 1:1000){
+  sigma[i] <- (v0*sigma0)/rchisq(1,v0) # joint prior for sigma
+
+  beta[i,] <- rmvnorm(1,mean=mu0,sigma[i]*solve(omega0)) # joint prior for beta
+}
+
+```
+
+```{r}
+# regression curves 
+
+reg_matrix <- matrix(ncol=nrow(lin), nrow=1000)
+
+for (i in 1:1000){
+  
+  reg_matrix[i,] <- beta[i,1] + beta[i,2] *lin$time + beta[i,3]*lin$time^2 + rnorm(1,0,sigma[i])
+  
+}
+
+
+plot(lin$temp, x=lin$time, type='l', xlim=c(0,1),ylim=c(-10,30))
+for (i in 1:1000){
+  lines(x=lin$time,y=reg_matrix[i,])
+}
+```
+
+We have changed v0 from 1 to 150 and sigma from 0.01 to 1 to get a better result. We get results close to what we expect as the temperature is higher during the summer months and lower in the winter. 
+
+## b
+
+Write a function that simulate draws from the joint posterior distribution of $\beta_0, \beta_1 , \beta_2, \sigma²$.
+  i. Plot a histogram for each marginal posterior of the parameters.
+  
+  ii. Make a scatter plot of the temperature data and overlay a curve for the
+  posterior median of the regression function $f(time) = E [temp|time] = \beta_0 + \beta_1 · time + \beta_2 · time²$ , i.e. the median of      f(time) is computed for every value of time . In addition, overlay curves for the 90% equal tail posterior probability intervals of f(time)   ,i.e. the 5 and 95 posterior percentiles of f(time) is computed for every value of time . Does the posterior probability intervals contain   most of the data points? Should they?
+  
+```{r}
+
+```
+
+
+## c
+
+## d
+
+
+
+# Posterior approximation for classification with logistic regressino
+
+
+## a
+
+
+## b
+
+
+## c
