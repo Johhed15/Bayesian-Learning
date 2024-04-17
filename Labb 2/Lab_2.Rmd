@@ -152,6 +152,9 @@ Write a function that simulate draws from the joint posterior distribution of $\
 
 
 ## c
+  
+sdf,ös
+sdf
 
 ## d
 
