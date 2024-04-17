@@ -102,7 +102,7 @@ about the regression curve. [Hint: R package mvtnorm can be used and your $Inv  
 ```{r}
 set.seed(123456789)
 # creating the variables
-mu0 <- t(c(0,100,-100))
+mu0 <- t(c(-5,120,-120))
 omega0 <- diag(1, nrow=3,ncol=3)
 v0 <- 150
 sigma0 <- 1
@@ -130,23 +130,28 @@ for (i in 1:1000){
 }
 
 
-plot(lin$temp, x=lin$time, type='l', xlim=c(0,1),ylim=c(-10,30))
+plot(lin$temp, x=lin$time, type='l', xlim=c(0,1),ylim=c(-10,40))
 for (i in 1:1000){
   lines(x=lin$time,y=reg_matrix[i,])
 }
 ```
 
-We have changed v0 from 1 to 150 and sigma from 0.01 to 1 to get a better result. We get results close to what we expect as the temperature is higher during the summer months and lower in the winter. 
+We have changed v0 from 1 to 150 and sigma from 0.01 to 1 to get a better result, we also changed mu to c(-5,120,120) to get a bit lower values during the winter and still around 25 in July. We get results close to what we expect as the temperature is higher during the summer months and lower in the winter. 
 
 ## b
 
 Write a function that simulate draws from the joint posterior distribution of $\beta_0, \beta_1 , \beta_2, \sigma²$.
+
   i. Plot a histogram for each marginal posterior of the parameters.
   
   ii. Make a scatter plot of the temperature data and overlay a curve for the
   posterior median of the regression function $f(time) = E [temp|time] = \beta_0 + \beta_1 · time + \beta_2 · time²$ , i.e. the median of      f(time) is computed for every value of time . In addition, overlay curves for the 90% equal tail posterior probability intervals of f(time)   ,i.e. the 5 and 95 posterior percentiles of f(time) is computed for every value of time . Does the posterior probability intervals contain   most of the data points? Should they?
   
+  
+
+
 ```{r}
+
 
 ```
 
