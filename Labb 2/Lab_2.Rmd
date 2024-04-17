@@ -148,6 +148,20 @@ Write a function that simulate draws from the joint posterior distribution of $\
   posterior median of the regression function $f(time) = E [temp|time] = \beta_0 + \beta_1 · time + \beta_2 · time²$ , i.e. the median of      f(time) is computed for every value of time . In addition, overlay curves for the 90% equal tail posterior probability intervals of f(time)   ,i.e. the 5 and 95 posterior percentiles of f(time) is computed for every value of time . Does the posterior probability intervals contain   most of the data points? Should they?
   
   
+Posterior
+
+$$\beta | \sigma^2,y \sim N[\mu_n, \sigma^2\Omega_n^{-1}]$$
+
+$$\sigma ^2 | y \sim Inv - \chi^2 (v_n,\sigma_n^2)$$
+
+$$\mu_n = (X^tX+\Omega_0)^{-1}(X^tX\hat\beta + \Omega_o\mu_0)$$
+
+$$\Omega_n = X^tX+\Omega_0$$
+
+$$v_n = v_0 + n$$
+
+$$v_n\sigma_n^2 = v_0\sigma^2_0 + (y^ty + \mu_o^t\Omega_0\mu_0 - \mu_n^t \Omega_n \mu_n)$$
+
 
 
 ```{r}
