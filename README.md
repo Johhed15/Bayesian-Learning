@@ -14,6 +14,12 @@
 
 # Lab 2
 
+* Linear regression and Polynomial regression on time series
+
+* Logistic regression, classifying if a person work or not
+
+* 
+
 # Lab 3 
 
 # Lab 4

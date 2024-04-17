@@ -152,15 +152,14 @@ Write a function that simulate draws from the joint posterior distribution of $\
 
 
 ## c
-  
-sdf,ös
-sdf
+
+
 
 ## d
 
 
 
-# Posterior approximation for classification with logistic regressino
+# Posterior approximation for classification with logistic regression 
 
 
 ## a
