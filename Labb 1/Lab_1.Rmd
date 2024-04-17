@@ -84,7 +84,7 @@ Draw 10000 random values from the posterior and verify graphically that the post
 
 $$\text{Posterior}: \theta | y \sim Beta (\alpha_0 + s, \beta_0 +f)$$
 
-Beta distribution has expected value $E[X] = \frac{\alpha}{\alpha+\beta}$ and variance $Var[X] = \frac{\alpha \beta}{(\alpha + \beta)^2+(\alpha+\beta+1)}$. Since we know the posterior we can deduce true mean and standard deviation to be the following ;
+Beta distribution has expected value $E[X] = \frac{\alpha}{\alpha+\beta}$ and variance $Var[X] = \frac{\alpha \beta}{(\alpha + \beta)^2+(\alpha+\beta+1)}$. Since we know the posterior we can deduce true mean and standard deviation to be the following;
 
 $$\text{True posterior mean} = \frac{\alpha_0+s}{\alpha_0 + s + \beta_0 + f} = \frac{\alpha_0+s}{\alpha_0 + \beta_0 + n}$$
 
