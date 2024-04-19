@@ -376,25 +376,41 @@ glmModel<- glm(Work ~ 0 + ., data = women, family = binomial)
 
 logisticpost <- function(betas,y,X,tau){
   
-  B_prior <- rmvnorm(1,rep(0,7),diag(tau ^ 2,7))
+  B_prior <- dmvnorm(betas,rep(0,7),diag(tau ^ 2,7), log=TRUE)
   
-  #linpred <- X%*%betas
-  #loglik <- (exp(linpred)/(1+exp(linpred)))
-
+  linpred <- as.matrix(X)%*%betas
+  loglik <- sum( linpred*y - log(1 + exp(linpred)) )
+  if (abs(loglik) == Inf) loglik = -20000;
   
+  B_prior+loglik
 }
 
 tau <- 2
 
 
+betas <- rep(0,7)
 
 
 
+OptimRes <- optim(betas,logisticpost,gr=NULL,y,X,tau,method=c("BFGS"),control=list(fnscale=-1),hessian=TRUE)
 
-#OptimRes <- optim(initVal,logPost,gr=NULL,y,X,tau,Sigma,method=c("BFGS"),control=list(fnscale=-1),hessian=TRUE)
 
+
+# Printing the results to the screen
+names(OptimRes$par) <- names(X) # Naming the coefficient by covariates
+approxPostStd <- sqrt(diag(solve(-OptimRes$hessian))) # Computing approximate standard deviations.
+names(approxPostStd) <-  names(X) # Naming the coefficient by covariates
+print('The posterior mode is:')
+print(OptimRes$par)
+
+print('GLM coefficients')
+print(glmModel$coefficients)
+
+print('The approximate posterior standard deviation is:')
+print(approxPostStd)
 
 ```
+The number of education years seem to have a positive impact if a woman works or not. The number of small children seems to have an important but negative impact on if a woman works or not. And this seems reasonable as if you have small children then you might need to take care of them
 
 ## b
 
@@ -406,6 +422,29 @@ with an income of 18. Plot the posterior predictive distribution of $Pr(y = 0|x)
 for this woman.
 [Hints: The R package mvtnorm will be useful. Remember that $Pr(y = 0|x)$
 can be calculated for each posterior draw of $\beta$.]
+
+
+```{r}
+# values for the woman to predict if she works or not
+x_woman <- matrix(c(1,18,11,7,40,1,1),1,7)
+woman_pred <- c()
+
+for (i in 1:1000){
+  # simulating 1000 different betas from multivariate normal dist with  beta_tilde and inverese of the hessian
+  betass <- rmvnorm(1,OptimRes$par,solve(-OptimRes$hessian))
+  woman_pred[i] <- 1- (exp(x_woman%*%t(betass))/((1+exp(x_woman%*%t(betass)))))
+  
+}
+
+
+
+```
+
+
+```{r}
+hist(woman_pred)
+```
+
 
 
 ## c
