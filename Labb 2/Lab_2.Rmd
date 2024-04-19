@@ -130,7 +130,7 @@ for (i in 1:1000){
 }
 
 
-plot(lin$temp, x=lin$time, type='l', xlim=c(0,1),ylim=c(-20,30))
+plot(lin$temp, x=lin$time, type='l', xlim=c(0,1),ylim=c(-10,30))
 for (i in 1:1000){
   lines(x=lin$time,y=reg_matrix[i,])
 }
@@ -454,3 +454,24 @@ Now, consider 13 women which all have the same features as the woman in
 the number of women, out of these 13, that are not working. [Hint: Simulate
 from the binomial distribution, which is the distribution for a sum of Bernoulli
 random variables.]
+
+
+
+
+```{r}
+
+Woman_13 <-c() 
+for (i in 1:1000){
+ # drawing 1 value per prob of 13 women 
+  
+ Woman_13[i] <- rbinom(1,13,woman_pred[i])
+  
+}
+
+hist(Woman_13)
+
+
+```
+
+
+The highest density of women not working with these attributes are close to 10/11 of 13 women. 
