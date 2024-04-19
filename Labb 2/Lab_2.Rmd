@@ -416,7 +416,7 @@ c(OptimRes$par[6] - 1.96 * approxPostStd[6],
   OptimRes$par[6] + 1.96 * approxPostStd[6])
 ```
 The feature does indeed have a big importance for the probability that a woman works. It has the largest coefficient of all covariates and the interval is always minus (i.e. does not cover 0) thus meaning it always has a negative effect for the probability that a woman works.
-And this seems reasonable as if you have small children then you might need to be at home for a couple of years unless you split the time of being home between both parents.
+And this seems reasonable as if you have small children then you might need to be at home for a couple of years unless you split the time of being at home between both parents.
 
 ## b
 
@@ -479,4 +479,4 @@ hist(Woman_13)
 ```
 
 
-The highest density of women not working with these attributes are close to 10/11 of 13 women. 
+The highest density of women not working with these attributes are at 10 of 13 women. 
