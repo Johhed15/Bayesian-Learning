@@ -87,33 +87,40 @@ A Bayesian analysis of the following quadratic regression model is to be perform
 
 $$temp = \beta_0 + \beta_1 \cdot time + \beta_2 \cdot time^2 + \epsilon , \space\space \epsilon \overset{iid}{\sim}  N(0,\sigma ^2)$$
 ```{r}
-# creating the time variable
+# creating the time variable, number of days since the beginning of the year divided by 365
 lin$time <- as.numeric((as.Date(lin$datetime) - as.Date("2022-01-01"))/365)
 ```
 
 ## a
 
 Use the conjugate prior for the linear regression model. The prior hyperparameters $\mu_0$, $\Omega _0$, $v_0$ and $\sigma^2_0$ shall be set to sensible values. Start with
-$\mu_0= (0, 100, −100)T, \Omega_0 = 0.01 \cdot I_3, v_0 = 1$ and $\sigma_0^2 =1$. Check if this prior agrees with your prior opinions by simulating draws from the joint prior
+$\mu_0= (0, 100, −100)^T, \Omega_0 = 0.01 \cdot I_3, v_0 = 1$ and $\sigma_0^2 =1$. Check if this prior agrees with your prior opinions by simulating draws from the joint prior
 of all parameters and for every draw compute the regression curve. This gives a collection of regression curves; one for each draw from the prior. Does the collection of curves look reasonable? If not, change the prior hyperparameters until the collection of prior regression curves agrees with your prior beliefs
-about the regression curve. [Hint: R package mvtnorm can be used and your $Inv  \sim \chi^2$ simulator of random draws from Lab 1.]
+about the regression curve. [Hint: R package mvtnorm can be used and your $Inv-\chi^2$ simulator of random draws from Lab 1.]
 
+Using a conjugate prior, the joint priors for $\beta$ and $\sigma^2$ is
+
+$$\beta^2 | \sigma^2 \sim N(\mu_0, \sigma^2 \Omega_0^{-1})$$
+
+$$\sigma^2 \sim Inv- \chi^2(v_0, \sigma^2_0)$$
 
 ```{r}
 set.seed(123456789)
 # creating the variables
-mu0 <- t(c(-10,120,-120))
-omega0 <- diag(1, nrow=3,ncol=3)
-v0 <- 150
+mu0 <- t(c(0, 100, -100))
+omega0 <- diag(0.01, nrow=3,ncol=3)
+v0 <- 1
 sigma0 <- 1
 n <- nrow(lin)
 
 beta <- matrix(ncol=3, nrow=1000)
 sigma <- matrix(ncol=1, nrow=1000)
 for (i in 1:1000){
-  sigma[i] <- (v0*sigma0)/rchisq(1,v0) # joint prior for sigma
-
-  beta[i,] <- rmvnorm(1,mean=mu0,sigma[i]*solve(omega0)) # joint prior for beta
+  # joint prior for sigma, this is the inv-chi2 simulator from lab 1
+  sigma[i] <- (v0*sigma0)/rchisq(1,v0) 
+  
+  # joint prior for beta
+  beta[i,] <- rmvnorm(1,mean=mu0,sigma[i]*solve(omega0)) 
 }
 
 ```
@@ -125,28 +132,75 @@ reg_matrix <- matrix(ncol=nrow(lin), nrow=1000)
 
 for (i in 1:1000){
   
+  # temp = b0 + b1*time + b2*time^2 + e, e ~ N(0, sigma^2)
   reg_matrix[i,] <- beta[i,1] + beta[i,2] *lin$time + beta[i,3]*lin$time^2 + rnorm(1,0,sigma[i])
   
 }
 
 
-plot(lin$temp, x=lin$time, type='l', xlim=c(0,1),ylim=c(-10,30))
+plot(n, xlim=c(0,1),ylim=c(-40,60), xlab = "Time", ylab = "Temp")
 for (i in 1:1000){
-  lines(x=lin$time,y=reg_matrix[i,])
+  lines(x=lin$time,y=reg_matrix[i,], col = "black")
 }
+lines(lin$temp, x=lin$time, type='l', col = "red", lwd = 1.5)
 ```
 
-We have changed v0 from 1 to 150 and sigma from 0.01 to 1 to get a better result. We get results close to what we expect as the temperature is higher during the summer months and lower in the winter. 
+The initial values gives shows a plot that is badly defined and the only inference really is that values of $[-40, 60]$ degrees are very frequent. We can therefore conclude the collection of curves does not look reasonable. The red curve shows the temperature measured and the black lines are the estimated curves. From this, we decided to change the values; $v_0= 150, \sigma_0^2= 1, \Omega_0 =1 \cdot I_3, \mu_0 = (-10, 120, -120)^T$.
+
+
+```{r}
+set.seed(123456789)
+# creating the variables
+mu0 <- t(c(-10,120,-120))
+omega0 <- diag(1, nrow=3,ncol=3)
+v0 <- 150
+sigma0 <- 1
+```
+
+
+```{r, echo = FALSE}
+n <- nrow(lin)
+
+beta <- matrix(ncol=3, nrow=1000)
+sigma <- matrix(ncol=1, nrow=1000)
+for (i in 1:1000){
+  sigma[i] <- (v0*sigma0)/rchisq(1,v0) # joint prior for sigma, this is the inv-chi2 simulator from lab 1
+
+  beta[i,] <- rmvnorm(1,mean=mu0,sigma[i]*solve(omega0)) # joint prior for beta
+}
+
+# regression curves 
+
+reg_matrix <- matrix(ncol=nrow(lin), nrow=1000)
+
+for (i in 1:1000){
+  
+  # temp = b0 + b1*time + b2*time^2 + e, e ~ N(0, sigma^2)
+  reg_matrix[i,] <- beta[i,1] + beta[i,2] *lin$time + beta[i,3]*lin$time^2 + rnorm(1,0,sigma[i])
+  
+}
+
+
+plot(n, xlim=c(0,1),ylim=c(-10,30), xlab = "Time", ylab = "Temp")
+for (i in 1:1000){
+  lines(x=lin$time,y=reg_matrix[i,], col = "black")
+}
+lines(lin$temp, x=lin$time, type='l', col = "red", lwd = 1.5)
+```
+
+The results we got from changing the values are more reasonable. The curve now follows a distinct pattern and seems to capture the seasonal change in temperature in Linköping over the year. The intercept is at -10 where the true temperature is slightly higher and towards springtime the temperature is lower than the estimates for a short while, other than that its a good estimate of the true temperatures. It captures the higher temperatures during summer months and lower during winter months well.
+
 
 ## b
 
-Write a function that simulate draws from the joint posterior distribution of $\beta_0, \beta_1 , \beta_2, \sigma²$.
+Write a function that simulate draws from the joint posterior distribution of $\beta_0, \beta_1 , \beta_2, \sigma^2$.
+
   i. Plot a histogram for each marginal posterior of the parameters.
   
   ii. Make a scatter plot of the temperature data and overlay a curve for the
   posterior median of the regression function $f(time) = E [temp|time] = \beta_0 + \beta_1 · time + \beta_2 · time²$ , i.e. the median of      f(time) is computed for every value of time . In addition, overlay curves for the 90% equal tail posterior probability intervals of f(time)   ,i.e. the 5 and 95 posterior percentiles of f(time) is computed for every value of time . Does the posterior probability intervals contain   most of the data points? Should they?
   
-Posterior
+Posteriors for the conjugate prior are
 
 $$\beta | \sigma^2,y \sim N[\mu_n, \sigma^2\Omega_n^{-1}]$$
 
@@ -185,33 +239,38 @@ v_n <- v0 + n # sigma posterior mean
 
 for (i in 1:1000){
   
-  mu_n <- solve(xTx + omega0) %*% (xTx %*% beta[i,] + omega0 %*% t(mu0)) # beta posterior mean
+  # beta posterior mean
+  mu_n <- solve(xTx + omega0) %*% (xTx %*% beta[i,] + omega0 %*% t(mu0)) 
   
-  vSigma_n <- v0 * sigma0 + (yTy + mu0 %*% omega0 %*% t(mu0)) - (t(mu_n) %*% omega_n %*% mu_n) # df, sigma posterior
+  # df, sigma posterior
+  vSigma_n <- v0 * sigma0 + (yTy + mu0 %*% omega0 %*% t(mu0)) - (t(mu_n) %*% omega_n %*% mu_n) 
   
-  sigmaPost[i] <- (vSigma_n) / rchisq(1, v_n) # joint sigma posterior distribution
+  # joint sigma posterior distribution
+  sigmaPost[i] <- (vSigma_n) / rchisq(1, v_n) 
   
-  betaPost[i,] <- rmvnorm(1, mu_n, sigma = sigmaPost[i]*solve(omega_n)) # joint beta posterior distribution
+  # joint beta posterior distribution
+  betaPost[i,] <- rmvnorm(1, mu_n, sigma = sigmaPost[i]*solve(omega_n)) 
 }
 
 ```
 
-### i.
+### i. Plot a histogram of each marginal posterior of the parameters
 
 ```{r}
-hist(betaPost[,1], main = "beta0 posterior"); hist(betaPost[,2], main = "beta1 posterior"); hist(betaPost[,3], main = "beta2 posterior"); hist(sigmaPost, main = "sigma posterior")
+{hist(betaPost[,1], main = "beta0 posterior"); hist(betaPost[,2], main = "beta1 posterior")}
+{hist(betaPost[,3], main = "beta2 posterior"); hist(sigmaPost, main = "sigma posterior")}
 ```
 
+The individual posterior parameters follow a normal distribution, except the $\sigma^2$ which has a distribution skewed to the right.
 
-### ii.
+### ii. Scatter plot of temperatures and overlay a curve for posterior median
 
 ```{r}
 # calculate posterior
-
 regressionPost <- matrix(ncol=nrow(lin), nrow=1000)
 
 for (i in 1:1000){
-  
+  # calculate posterior according to the regression formula
   regressionPost[i,] <- betaPost[i,1] + betaPost[i,2] *lin$time + betaPost[i,3]*lin$time^2
   
 }
@@ -221,11 +280,12 @@ medianPost <- c()
 
 for(i in 1:365){
   
+  # calculate median for every day
   medianPost[i] <- median(regressionPost[,i])
   
 }
 
-# eqti
+# 90% equal tail interval
 eqtiPost <- matrix(nrow = 365, ncol = 2)
 
 for(i in 1:365){
@@ -237,33 +297,57 @@ for(i in 1:365){
 
 
 ```{r}
-plot(lin$temp, x=lin$time, xlim=c(0,1),ylim=c(-20,30), col = "darkgrey") # scatter plot of temperature data
+plot(lin$temp, x=lin$time, xlim=c(0,1),ylim=c(-20,30), col = "black", pch = 1) # scatter plot of temperature data
 lines(x=lin$time,y=medianPost, col = "red", lwd = 2) # curve for posterior median of regression function
 lines(x = lin$time, y = eqtiPost[,1], col = "green", lwd = 2, lty = "dashed") # curve for the lower quantile
 lines(x = lin$time, y = eqtiPost[,2], col = "royalblue", lwd = 2, lty = "dashed") # curve for the upper quantile
 ```
+
 The posterior probability intervals do contain a good amount of data for a large part of time, however not perfect. The model is limited in that it only is a quadratic model for data seemingly looking to be more complex, thus the posterior can only be optimized to a certain point.
 
 
 
 ## c
 
+It is of interest to locate the time with the highest expected temperature (i.e.
+the time where f(time) is maximal). Let's call this value $\bar{x}$. Use the simulated
+draws in (b) to simulate from the posterior distribution of $\bar{x}$. [Hint: the
+regression curve is a quadratic polynomial. Given each posterior draw of $\beta_0, \beta_1, \beta_2$, you can find a simple formula for $\bar{x}$.
+
+
+A simple formula for calculating the expected maximum of a quadratic function is by calculating it's derivative and finding the day for where it's closest to 0.
+
+Our polynomial regression has formula 
+
+$$f(time) = \beta_0 + \beta_1 time + \beta_2 time^2$$
+With derivative of 
+
+$$f'(time) = \beta_1 + 2 \cdot \beta_2 \cdot time$$
+
 ```{r}
 derivPost <- matrix(ncol = 1, nrow = 1000)
 
 for(i in 1:1000){
-  derivPost[i,] <- lin$time[which.min(abs(betaPost[i,2] + 2*betaPost[i,3]*lin$time))] # calculate derivative for each day
+  # for each days derivative, take min of abs value to find nearest to zero
+  derivPost[i,] <- lin$time[which.min(abs(betaPost[i,2] + 2*betaPost[i,3]*lin$time))] 
 }
 
-hist(derivPost, main = "Time with highest expected temperature", xlab = "Time") # posterior distribution of highest expected temperature
-plot(lin$temp, x=lin$time, xlim=c(0,1),ylim=c(-20,30), col = "darkgrey"); lines(x=lin$time,y=medianPost, col = "red", lwd = 2)
+# posterior distribution of highest expected temperature
+hist(derivPost, main = "Time with highest expected temperature", xlab = "Time")
+```
 
-derivMax <- max(table(derivPost)) # the day (i.e. element) that has derivative closest to zero
+The temperature is the higest at almost precisely 0.5, i.e. half of the year gone by. This makes sense as it would place us in the midst of the summer months. To confirm this, we can plot the curve and index the element of the derivation closest to zero.
+
+```{r}
+plot(lin$temp, x=lin$time, xlim=c(0,1),ylim=c(-20,30), col = "black"); lines(x=lin$time,y=medianPost, col = "red", lwd = 2)
+
+# the time (i.e element) that has derivative closest to zero
+derivMax <- max(table(derivPost)) 
 
 abline(v = lin$time[derivMax], col = "darkgreen") # derivative closest to zero according to each day
 ```
 
-A simple formula for calculating the expected maximum of a quadratic function is by calculating it's derivative and finding the day for where it's closest to 0.
+The vertical line shows where on the curve the highest expected temperature should fall according to the derivative. This happens at the maximum of the curve which is expected.
 
 ## d
 
@@ -273,14 +357,21 @@ about overftting the data. Suggest a suitable prior that mitigates this potentia
 problem. You do not need to compute the posterior. Just write down your
 prior. [Hint: the task is to specify $\mu_0$ and $\Omega_0$ in a suitable way.]
 
+An order 10 polynomial regression has formula
+
+$$y = X_P \beta + \epsilon, \ X_P = (1, x, x^2, ..., x^{10})$$
+
 
 ```{r}
 
 set.seed(123456789)
 # creating the variables
-mu0 <- t(c(-5,120,-120,0,0,0,0,0,0,0,0)) # choosing zero as mu_0 values for mean of priors of beta of a higher order to get the parameters close to 0
+# set zero as mu_0 values for mean of priors of beta of a higher order to get parameters close to 0
+mu0 <- t(c(-5,120,-120,0,0,0,0,0,0,0,0)) 
 
-omega0 <- diag(c(1,1,1,rep(1000,8)), nrow=11,ncol=11) # picking high values of omega to get lower variance of the pior(more certain that these parameters are 0 to reduce overfittning)
+# picking high values of omega to get lower variance of the prior
+# more certain that these parameters are 0 to reduce overfittning
+omega0 <- diag(c(1,1,1,rep(1000,8)), nrow=11,ncol=11) 
 v0 <- 150
 sigma0 <- 1
 n <- nrow(lin)
@@ -304,25 +395,30 @@ for (i in 1:1000){
   
 }
 
-plot(lin$temp, x=lin$time, type='l', xlim=c(0,1),ylim=c(-10,40))
+plot(n, xlim=c(0,1),ylim=c(-10,40), xlab = "Time", ylab = "Temp")
 for (i in 1:1000){
   lines(x=lin$time,y=reg_matrix[i,])
 }
-
+lines(lin$temp, x=lin$time, type='l', col="red")
 ```
+# picking high values of omega to get lower variance of the prior
+# more certain that these parameters are 0 to reduce overfittning
 
-priors for polynomial regression of order 10:
+
+Priors for polynomial regression of order 10:
 
 Low values for $mu_0$ as we want beta parameters for the higher orders to be close to 0 so we don't overfit
 
 $$\mu_0 = (-5,120,-120,0,0,0,0,0,0,0,0) $$
 
-The values in $\Omega_0$ to be high for the columns of the higher orders to choose a prior which is very sure of these mu values.
+Since the inverse of $\Omega_0$ is used in calculation, the values should be high for the columns of the higher order to choose a prior that has high probability for these $\mu$-values.
+
 
 $$\Omega_0 = (1,1,1,1000,1000,1000,1000,1000,1000,1000,1000)$$
 
 
 \pagebreak
+
 # Posterior approximation for classification with logistic regression 
 
 The dataset WomenAtWork.dat contains n = 132 observations on the following eight
