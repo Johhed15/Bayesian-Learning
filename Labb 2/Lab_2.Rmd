@@ -303,7 +303,7 @@ lines(x = lin$time, y = eqtiPost[,1], col = "green", lwd = 2, lty = "dashed") # 
 lines(x = lin$time, y = eqtiPost[,2], col = "royalblue", lwd = 2, lty = "dashed") # curve for the upper quantile
 ```
 
-The posterior probability intervals do contain a good amount of data for a large part of time, however not perfect. The model is limited in that it only is a quadratic model for data seemingly looking to be more complex, thus the posterior can only be optimized to a certain point.
+The posterior probability intervals do contain a good amount of data for a large part of time, however not perfect. The model is limited in that it only is a quadratic model for data seemingly looking to be more complex, thus the posterior can only be optimized to a certain point. An equal tail interval means the same density mass is outside both boundaries.
 
 
 
@@ -319,13 +319,14 @@ A simple formula for calculating the expected maximum of a quadratic function is
 
 Our polynomial regression has formula 
 
-$$f(time) = \beta_0 + \beta_1 time + \beta_2 time^2$$
+$$f(time) = \beta_0 + \beta_{1,i} \cdot time + \beta_{2,i}\cdot time^2$$
 With derivative of 
 
-$$f'(time) = \beta_1 + 2 \cdot \beta_2 \cdot time$$
+$$f'(time) = \beta_{1,i} + 2 \cdot \beta_{2 ,i}\cdot time$$
 
 ```{r}
 derivPost <- matrix(ncol = 1, nrow = 1000)
+
 
 for(i in 1:1000){
   # for each days derivative, take min of abs value to find nearest to zero
@@ -401,13 +402,11 @@ for (i in 1:1000){
 }
 lines(lin$temp, x=lin$time, type='l', col="red")
 ```
-# picking high values of omega to get lower variance of the prior
-# more certain that these parameters are 0 to reduce overfittning
 
 
 Priors for polynomial regression of order 10:
 
-Low values for $mu_0$ as we want beta parameters for the higher orders to be close to 0 so we don't overfit
+Low values for $mu_0$ as we want beta parameters for the higher orders to be close to 0 so we don't overfit.
 
 $$\mu_0 = (-5,120,-120,0,0,0,0,0,0,0,0) $$
 
@@ -488,7 +487,8 @@ betas <- rep(0,7)
 
 
 
-OptimRes <- optim(betas,logisticpost,gr=NULL,y,X,tau,method=c("BFGS"),control=list(fnscale=-1),hessian=TRUE)
+OptimRes <- optim(betas,logisticpost,gr=NULL,y,X,tau,method=c("BFGS"),
+                  control=list(fnscale=-1),hessian=TRUE)
 
 
 
@@ -532,8 +532,11 @@ x_woman <- matrix(c(1,18,11,7,40,1,1),1,7)
 woman_pred <- c()
 
 for (i in 1:1000){
-  # simulating 1000 different betas from multivariate normal dist with  beta_tilde and inverese of the hessian
+  # simulating 1000 different betas from multivariate normal dist 
+  # with beta_tilde and inverese of the hessian
   betass <- rmvnorm(1,OptimRes$par,solve(-OptimRes$hessian))
+  
+  # the logistic regression function conjugate to get prob of not working
   woman_pred[i] <- 1- (exp(x_woman%*%t(betass))/((1+exp(x_woman%*%t(betass)))))
   
 }
@@ -546,6 +549,7 @@ for (i in 1:1000){
 hist(woman_pred)
 ```
 
+A women with the characteristics described has a high probability with mode around 80% to not be working. She has a small child and a big child but still young one, which could mean she is not working and instead takes care of them.
 
 
 ## c
