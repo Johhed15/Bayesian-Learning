@@ -161,15 +161,19 @@ value. Standardized).
 
 ## a)
 
-```{r}
-women <- read.table('eBayNumberOfBidderData_2024.dat', header=TRUE)
-
-```
-
-
 Obtain the maximum likelihood estimator of $\beta$ in the Poisson regression model
 for the eBay data [Hint: glm.R, don't forget that glm() adds its own intercept
 so don't input the covariate Const]. Which covariates are signifcant?
+
+```{r}
+coins <- read.table('eBayNumberOfBidderData_2024.dat', header=TRUE)
+
+
+mle <- glm(nBids ~ .-Const, data = coins, family = poisson)
+summary(mle)
+```
+VerfyID, Sealed, LogBook and MinBidShare and MajBlem are significant on a 99% significance level.
+
 
 
 ## b)
@@ -180,6 +184,47 @@ $$\beta>y \sim N(\hat\beta, J_y^{-1}(\hat\beta))$$
 
 where $\hat\beta$ is the posterior mode and $J_y(\hat\beta)$ is the negative hessian at the posterior mode.$\hat\beta$ and $J_y(\hat\beta)$ can be obtained by numerical optimization(optim.R) exactly like youve already did for the first logistic regression in Lab 2 (but with the log posterior function replaced by the corresponding one for the Poisson model, which you have code up.).
 
+```{r}
+library(mvtnorm)
+
+y <- as.matrix(coins[,1])
+X <- as.matrix(coins[,-1])
+
+n <- nrow(X)
+p <- ncol(X)
+Xnames <- colnames(X)
+
+# prior
+mu <- as.matrix(rep(0,p))
+Sigma <- as.matrix(100*(solve(t(X) %*% X)))
+
+poissonPost <- function(betas,y,X,mu,Sigma){
+  
+  linPred <- X%*%betas;
+  logLik <- sum(linPred*y - exp(linPred))
+  logPrior <- dmvnorm(betas, mu, Sigma, log=TRUE);
+  
+  if (abs(logLik) == Inf) logLik = -20000; 
+ 
+  return(logLik + logPrior)
+}
+
+# Select the initial values for beta
+initVal <- matrix(0,p,1)
+
+# The argument control is a list of options to the optimizer optim, where fnscale=-1 means that we minimize 
+# the negative log posterior. Hence, we maximize the log posterior.  
+OptimRes <- optim(initVal,poissonPost,gr=NULL,y,X,mu,Sigma,method=c("BFGS"),control=list(fnscale=-1),hessian=TRUE)
+
+# Printing the results to the screen
+names(OptimRes$par) <- Xnames # Naming the coefficient by covariates
+approxPostStd <- sqrt(diag(solve(-OptimRes$hessian))) # Computing approximate standard deviations.
+names(approxPostStd) <- Xnames # Naming the coefficient by covariates
+print('The posterior mode is:')
+print(OptimRes$par[1:9])
+print('The approximate posterior standard deviation is:')
+print(approxPostStd)
+```
 
 
 ## c) 
