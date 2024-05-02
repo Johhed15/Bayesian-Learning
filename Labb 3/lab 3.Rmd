@@ -61,6 +61,7 @@ library(coda)
 library(readxl)
 library(mvtnorm)
 library(tidyr)
+library(BayesLogit)
 library(tinytex)
 ```
 
@@ -76,6 +77,40 @@ Implement (code!) a Gibbs sampler that simulates from the joint posterior $p(w,\
 
 
 ```{r}
+women <- read.table('WomenAtWork.dat', header=TRUE)
+
+# picking out the variables from the data
+y <- women$Work
+X <- as.matrix(women[,-1])
+
+# creating variables that are used in the sampling
+tau <- 3
+betas <- rep(1,7)
+n_samp <- 1000
+kappa <- y-0.5
+beta_samples <- matrix(NA, nrow = n_samp, ncol = 7)
+beta_samples[1,] <- betas
+
+wi <- matrix(0,nrow = ncol(X),ncol=n_samp)
+for (i in 2:n_samp){
+  
+  for (j in 1:nrow(X)){
+
+    wi[j,i-1] <- rpg(1,X[j,]%*%beta_samples[i-1,])
+  }
+  omega <- diag(wi[i-1])
+  B_prior <- dmvnorm(betas,rep(1,7),diag(tau ^ 2,7), log=TRUE)
+  
+  Vw <- solve(t(X)%*%omega%*%X + solve(diag(tau ^ 2,7))) # equation for Vm
+  mw <- vm %*%(t(X)*k) # equatino for mw
+  beta_samples[i,] <- dmvnorm(1,mw,Vm)
+  #loglik <- sum( linpred*y - log(1 + exp(linpred)))
+
+  #B_prior+loglik
+  
+}
+
+
 
 
 ```
@@ -125,6 +160,12 @@ value. Standardized).
 
 
 ## a)
+
+```{r}
+women <- read.table('eBayNumberOfBidderData_2024.dat', header=TRUE)
+
+```
+
 
 Obtain the maximum likelihood estimator of $\beta$ in the Poisson regression model
 for the eBay data [Hint: glm.R, don't forget that glm() adds its own intercept
@@ -198,8 +239,24 @@ of  $\phi$  where the AR(1)-process is stationary). Include a plot of at least o
 realization in the report. What effect does the value of  $\phi$  have on $x_{1:T}$ 
 
 
+```{r}
 
+mu <- 9
+sigma <- 4
+phi <- seq(-1,1,by=0.1)
+xmat <- matrix(mu,ncol=length(phi), nrow=250)
 
+for (j in 1:length(phi)){# looping over different phi values
+  for (i in 2:250){ # looping over all time stamps
+  xmat[i,j] <- mu + phi[j]*(xmat[(i-1),j] - mu) + rnorm(1,0,sigma)   
+}
+}
+
+plot(x=c(1:250), y=xmat[,1],type='l')
+lines(xmat[,21], col='red')
+```
+
+The value of phi makes how xt should depend on the previous value, positive/negative and how much it should depend on it. 
 
 ## b)
 
@@ -215,6 +272,21 @@ parameterization used here.]
 * For each of the two data sets, evaluate the convergence of the samplers and plot the joint posterior of $\mu$ and $\phi$. Comments?
 
 
+```{r}
+mu <- 9
+sigma <- 4
+phi2 <- c(0.3,0.97)
+xmat <- matrix(mu,ncol=2, nrow=250)
+
+for (j in 1:length(phi2)){# looping over different phi values
+  for (i in 2:250){ # looping over all time stamps
+  xmat[i,j] <- mu + phi2[j]*(xmat[(i-1),j] - mu) + rnorm(1,0,sigma)   
+}
+}
+
+plot(x=c(1:250), y=xmat[,2],type='l')
+lines(xmat[,1], col='red')
+```
 
 
 
