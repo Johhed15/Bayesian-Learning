@@ -87,24 +87,26 @@ X <- as.matrix(women[,-1])
 # creating variables that are used in the sampling
 tau <- 3
 betas <- rep(1,7)
-n_samp <- 1000
-kappa <- y-0.5
+n_samp <- 100
+kappa <- ifelse(y==1, y-0.5,y)
 beta_samples <- matrix(NA, nrow = n_samp, ncol = 7)
 beta_samples[1,] <- betas
 
-wi <- matrix(0,nrow = ncol(X),ncol=n_samp)
+wi <- matrix(0,nrow = nrow(X),ncol=n_samp)
+i=2
+j=1
 for (i in 2:n_samp){
   
   for (j in 1:nrow(X)){
 
     wi[j,i-1] <- rpg(1,X[j,]%*%beta_samples[i-1,])
   }
-  omega <- diag(wi[i-1])
-  B_prior <- dmvnorm(betas,rep(1,7),diag(tau ^ 2,7), log=TRUE)
+  omega <- diag(wi[,i-1])
+  #B_prior <- dmvnorm(betas,rep(1,7),diag(tau ^ 2,7), log=TRUE)
   
   Vw <- solve(t(X)%*%omega%*%X + solve(diag(tau ^ 2,7))) # equation for Vm
-  mw <- vm %*%(t(X)*k) # equatino for mw
-  beta_samples[i,] <- dmvnorm(1,mw,Vm)
+  mw <- Vw %*%(t(X)*kappa) # equatino for mw
+  beta_samples[i,] <- dmvnorm(betas,rowMeans(mw),Vw)
   #loglik <- sum( linpred*y - log(1 + exp(linpred)))
 
   #B_prior+loglik
@@ -119,7 +121,7 @@ for (i in 2:n_samp){
 
 
 ## b
-Use the posterior draws from a) to compute 90% equal tail credible interval for $Pr(y=1|x)$ where x corresponds to a 38-year-old woman with 1 chils(3 years old), 12 years of education and 7 years of experience and a husband with an income of 22. A 90% equal tail credible interval (a,b) cuts the off 5% percent of the posterior probability mass to the laft of a, and 5% to the right of b. 
+Use the posterior draws from a) to compute 90% equal tail credible interval for $Pr(y=1|x)$ where x corresponds to a 38-year-old woman with 1 chils(3 years old), 12 years of education and 7 years of experience and a husband with an income of 22. A 90% equal tail credible interval (a,b) cuts the off 5% percent of the posterior probability mass to the left of a, and 5% to the right of b. 
 
 ```{r}
 
