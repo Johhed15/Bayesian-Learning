@@ -63,6 +63,7 @@ library(mvtnorm)
 library(tidyr)
 library(BayesLogit)
 library(tinytex)
+library(rstan)
 ```
 
 # Gibbs sampling for the logistic regression
@@ -317,9 +318,9 @@ Write a function in R that simulates data from the AR(1)-process
 $$ x _t = \mu + \phi (x_{t-1}- \mu) + \epsilon_t, \epsilon_t \overset{iid}\sim N(0,\sigma^2)$$
 
 
-for given values of $\mu, \phi \text{ and } \sigma^"$. Start the process at x1 = $\mu$ and then simulate
+for given values of $\mu, \phi \text{ and } \sigma^2$. Start the process at x1 = $\mu$ and then simulate
 values for xt for t = 2,3...T and return the vector x1:T containing all time
-points. Use $\mu$ = 9, $\sigma$ = 4 and T = 250 and look at some different realizations
+points. Use $\mu$ = 9, $\sigma^2$ = 4 and T = 250 and look at some different realizations
 (simulations) of x1:T for values of $\phi$ between −1 and 1 (this is the interval
 of  $\phi$  where the AR(1)-process is stationary). Include a plot of at least one
 realization in the report. What effect does the value of  $\phi$  have on $x_{1:T}$ 
@@ -334,7 +335,7 @@ xmat <- matrix(mu,ncol=length(phi), nrow=250)
 
 for (j in 1:length(phi)){# looping over different phi values
   for (i in 2:250){ # looping over all time stamps
-  xmat[i,j] <- mu + phi[j]*(xmat[(i-1),j] - mu) + rnorm(1,0,sigma)   
+  xmat[i,j] <- mu + phi[j]*(xmat[(i-1),j] - mu) + rnorm(1,0,sqrt(sigma))   
 }
 }
 
@@ -358,7 +359,10 @@ parameterization used here.]
 * For each of the two data sets, evaluate the convergence of the samplers and plot the joint posterior of $\mu$ and $\phi$. Comments?
 
 
+
 ```{r}
+set.seed(123456789)
+
 mu <- 9
 sigma <- 4
 phi2 <- c(0.3,0.97)
@@ -366,7 +370,7 @@ xmat <- matrix(mu,ncol=2, nrow=250)
 
 for (j in 1:length(phi2)){# looping over different phi values
   for (i in 2:250){ # looping over all time stamps
-  xmat[i,j] <- mu + phi2[j]*(xmat[(i-1),j] - mu) + rnorm(1,0,sigma)   
+  xmat[i,j] <- mu + phi2[j]*(xmat[(i-1),j] - mu) + rnorm(1,0,sqrt(sigma)) 
 }
 }
 
@@ -375,4 +379,137 @@ lines(xmat[,1], col='red')
 ```
 
 
+```{r}
+# stan model phi = 0.3, code from slides (changed)
+
+y=xmat[,1]
+N=length(y)
+
+
+StanModel = '
+data {
+  int<lower=0> N; // Number of observations
+  real y[N];
+}
+parameters {
+  real mu;
+  real<lower=-1,upper=1> phi; // creating phi with the interval -1,1
+  real<lower=0> sigma2;
+}
+model {
+  mu ~ normal(9,20); // Normal with mean 9, st.dev. 20
+  phi ~ uniform(-1,1); //  uniform in the interal
+  sigma2 ~ scaled_inv_chi_square(1,2); // Scaled-inv-chi2 with nu 1,sigma 2
+  for(i in 2:N){
+    y[i] ~ normal(mu + phi * (y[i-1] - mu),sqrt(sigma2));
+  }
+}'
+```
+
+
+
+
+```{r, message=FALSE}
+data <- list(N=N, y=y)
+warmup <- 1000
+niter <- 2000
+fit <- stan(model_code=StanModel,data=data, warmup=warmup,iter=niter,chains=4)
+# Print the fitted model
+#print(fit,digits_summary=3)
+fitsum <- summary(fit)$summary[c(1,2,3),c(1,4,8,9)]
+# Extract posterior samples
+
+# Do traceplots of the first chain
+#par(mfrow = c(1,1))
+#plot(postDraws$mu[1:(niter-warmup)],type="l",ylab="mu",main="Traceplot")
+# Do automatic traceplots of all chains
+#traceplot(fit)
+# Bivariate posterior plots
+#pairs(fit)
+knitr::kable(fitsum,caption = 'phi = 0.3')
+
+```
+
+The posterior mean for mu, phi and sigma are close to the true values for the timeserie, and all parameters have over 3500 efficient draws. 
+
+
+
+```{r}
+# stan model phi = 0.3
+
+y=xmat[,2]
+N=length(y)
+
+
+StanModel = '
+data {
+  int<lower=0> N; // Number of observations
+  real y[N];
+}
+parameters {
+  real mu;
+  real<lower=-1,upper=1> phi; // creating phi with the interval -1,1
+  real<lower=0> sigma2;
+}
+model {
+  mu ~ normal(9,20); // Normal with mean 9, st.dev. 20
+  phi ~ uniform(-1,1); //  uniform in the interal
+  sigma2 ~  scaled_inv_chi_square(1,2); // Scaled-inv-chi2 with nu 1,sigma 2
+  for(i in 2:N){
+    y[i] ~ normal(mu + phi * (y[i-1] - mu),sqrt(sigma2));
+  }
+}'
+```
+
+
+```{r}
+data <- list(N=N, y=y)
+warmup <- 1000
+niter <- 2000
+fit2 <- stan(model_code=StanModel,data=data, warmup=warmup,iter=niter,chains=4)
+# Print the fitted model
+fit2sum <- summary(fit2)$summary[c(1,2,3),c(1,4,8,9)]
+
+knitr::kable(fit2sum,caption = 'phi = 0.97')
+```
+
+The timeserie with phi = 0.97 also have posterior means close to the true values but the credible interval for mu  even cover 0, but the other credible intervals are tighter. The number of efficient draws is also much lower for this value of phi, this probably has something to do with mu covering 0. 
+
+
+
+```{r}
+# Do traceplots 
+
+traceplot(fit, warmup=TRUE, nrow=3)
+```
+
+```{r}
+# eval convergence
+postDraws2 <- extract(fit2)
+# Do traceplots of the  chain
+
+traceplot(fit2, warmup=TRUE, nrow=3)
+```
+
+Looking at the traceplots for the parameters for the two time series we can see that all parameters seems to converge quickly as they go close and vary around the true value after very few iterations. Whats notable is that mu for the timeserie with phi = 0.97 is that this vary much more than all other parameters but it also seems to have some outliers here and there.
+
+
+
+
+```{r}
+# joint posterior of phi = 0.3
+postDraws <- extract(fit)
+plot(postDraws$mu,y=postDraws$phi, type='p', ylab='phi', xlab='mu')
+```
+
+The values for phi and mu are close to the center which has the highest density and are where the true values also are. 
+
+
+```{r}
+# joint posterior of phi = 0.97
+postDraws2 <- extract(fit2)
+plot(postDraws2$mu,y=postDraws2$phi, type='p', ylab='phi', xlab='mu')
+```
+
+For phi = 0.97 we have a upper bound where phi cant go over 1 so we don't get the same shape as above unless the variance of this phi would be really low and no values would go close to 1. Mu also had a really wide credibility interval.
 
