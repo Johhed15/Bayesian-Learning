@@ -249,6 +249,47 @@ Now, use your new Metropolis function to sample from the posterior of $\beta$
 in the Poisson regression for the eBay dataset. Assess MCMC convergence by
 graphical methods
 
+* Program general function object that uses the Metropolis algorithm to generate random draws from an arbitrary posterior density
+```{r}
+# theta is vector of model parameters for which posterior density is evaluated, must be first argument
+# logPostFunc is function object that computes log posterior density at any value of parameter vector
+# C is tuning parameter
+# Sigma is approximate posterior std deviation, J^(-1)_y(Beta)
+
+
+RWMSampler <- function(theta, logPostFunc, C, Sigma, its){
+  
+  n <- its
+  theta0 <- theta
+  theta1 <- c()
+  accepted <- c()
+  
+  for(i in 1:n){
+     # propsal density is multivariate normal (random walk metropolis)
+     theta_p <- rmvnorm(1, mean = theta0, sigma = C * logPostFunc, log = TRUE)
+     
+     # ratio of Metropolis posterior densities acceptance probability = exp[log p(theta_p | y) - log p(theta^(i-1) | y)]
+     alpha <- exp(theta_p - theta0)
+     
+     if(alpha > runif(1)){
+       theta1[i] <- theta_p
+       theta0 <- theta_p
+       
+     }
+  }
+  
+}
+```
+
+* Use Metropolis function to sample from posterior of $\beta$ in the Poisson regression. Assess MCMC convergence graphically.
+```{r}
+
+```
+
+
+
+
+
 ## d)
 
 Use the MCMC draws from c) to simulate from the predictive distribution of
