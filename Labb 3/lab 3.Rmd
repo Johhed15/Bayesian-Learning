@@ -88,7 +88,7 @@ X <- as.matrix(women[,-1])
 tau <- 3
 betas <- rep(1,7)
 n_samp <- 100
-kappa <- ifelse(y==1, y-0.5,y)
+kappa <- as.matrix(y-0.5,ncol=1)
 beta_samples <- matrix(NA, nrow = n_samp, ncol = 7)
 beta_samples[1,] <- betas
 
@@ -105,8 +105,8 @@ for (i in 2:n_samp){
   #B_prior <- dmvnorm(betas,rep(1,7),diag(tau ^ 2,7), log=TRUE)
   
   Vw <- solve(t(X)%*%omega%*%X + solve(diag(tau ^ 2,7))) # equation for Vm
-  mw <- Vw %*%(t(X)*kappa) # equatino for mw
-  beta_samples[i,] <- dmvnorm(betas,rowMeans(mw),Vw)
+  mw <- Vw %*%(t(X)%*%kappa) # equatino for mw
+  beta_samples[i,] <- rmvnorm(1,mw,Vw)
   #loglik <- sum( linpred*y - log(1 + exp(linpred)))
 
   #B_prior+loglik
