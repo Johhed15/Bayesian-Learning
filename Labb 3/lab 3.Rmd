@@ -254,41 +254,66 @@ graphical methods
 
 * Program general function object that uses the Metropolis algorithm to generate random draws from an arbitrary posterior density
 ```{r}
-# theta is vector of model parameters for which posterior density is evaluated, must be first argument
+# theta is a vector of model parameters for which posterior density is evaluated, must be first argument
 # logPostFunc is function object that computes log posterior density at any value of parameter vector
 # C is tuning parameter
 # Sigma is approximate posterior std deviation, J^(-1)_y(Beta)
 
-
-RWMSampler <- function(theta, logPostFunc, C, Sigma, its){
+RWMSampler <- function(theta, logPostFunc, C, Sigma, its, y, X, mu){
   
-  n <- its
-  theta0 <- theta
-  theta1 <- c()
-  accepted <- c()
+  n <- its # iterations
   
-  for(i in 1:n){
-     # propsal density is multivariate normal (random walk metropolis)
-     theta_p <- rmvnorm(1, mean = theta0, sigma = C * logPostFunc, log = TRUE)
+  theta0 <- matrix(theta, nrow = ncol(diag(Sigma)), ncol = 1) # initial matrix of theta
+  
+  theta1 <- matrix(nrow = n, ncol = ncol(diag(Sigma))) # accepted thetas
+  colnames(theta1) <- colnames(X)
+  
+  # propsal density is multivariate normal (random walk metropolis)
+  theta1[1,] <- rmvnorm(1, mean = theta0, sigma = C * diag(Sigma))
+  
+  for(i in 2:n){
+     
+     # theta_(i-1) is set to the previous value of proposed theta
+     theta0 <- c(as.numeric(theta1[i-1,]))
+     
+     # theta_p | theta_(i-1) is calculated
+     theta_p <- rmvnorm(1, mean = theta0, sigma = C * diag(Sigma))
+     
+     theta_p <- c(theta_p)
      
      # ratio of Metropolis posterior densities acceptance probability = exp[log p(theta_p | y) - log p(theta^(i-1) | y)]
-     alpha <- exp(theta_p - theta0)
+     ratio <- exp(logPostFunc(theta_p, y, X, mu, diag(Sigma)) - logPostFunc(theta0, y, X, mu, diag(Sigma)))
      
-     if(alpha > runif(1)){
-       theta1[i] <- theta_p
-       theta0 <- theta_p
+     # acceptance probability
+     alpha <- min(1, ratio)
+     
+     
+     if(alpha > runif(1,0,1)){
+       theta1[i,] <- theta_p
        
+     } else {
+       theta1[i,] <- theta0
      }
   }
   
+  return(theta1)
 }
 ```
 
 * Use Metropolis function to sample from posterior of $\beta$ in the Poisson regression. Assess MCMC convergence graphically.
 ```{r}
 
-```
+set.seed(1234567890)
+metropolisRW <- RWMSampler(theta = 0, logPostFunc = poissonPost, C = 0.2, Sigma = approxPostStd, 
+                                    its = 5000, y = y, X = X, mu = mu)
 
+conv <- colMeans(metropolisRW)
+
+for(i in 1:p){
+  plot(metropolisRW[,i], type = "l", lwd = 1)
+}
+conv
+```
 
 
 
