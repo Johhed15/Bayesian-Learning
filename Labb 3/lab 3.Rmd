@@ -305,13 +305,18 @@ RWMSampler <- function(theta, logPostFunc, C, Sigma, its, y, X, mu){
 
 set.seed(1234567890)
 metropolisRW <- RWMSampler(theta = 0, logPostFunc = poissonPost, C = 0.2, Sigma = approxPostStd, 
-                                    its = 5000, y = y, X = X, mu = mu)
+                                    its = 1000, y = y, X = X, mu = mu)
 
 conv <- colMeans(metropolisRW)
 
 for(i in 1:p){
   plot(metropolisRW[,i], type = "l", lwd = 1)
 }
+
+for(i in 1:p){
+  hist(metropolisRW[,i])
+}
+
 conv
 ```
 
@@ -334,6 +339,22 @@ auction?
 * LogBook = 1.2
 * MinBidShare = 0.8
 
+```{r}
+set.seed(1234567890)
+
+newBidder <- as.matrix(c(1,1,0,1,0,1,0,1.2,0.8))
+
+pred <- c()
+for(i in 1:nrow(metropolisRW)){
+  # calculate lambda for poisson regression model
+  # and create vector of predictive values from random walk function
+  lambda <- exp(newBidder %*% metropolisRW[i,])
+  pred[i] <- rpois(1,lambda)
+  
+}
+
+hist(pred, freq = FALSE)
+```
 
 
 # Time series models in Stan
