@@ -87,7 +87,7 @@ X <- as.matrix(women[,-1])
 # creating variables that are used in the sampling
 tau <- 3
 betas <- rep(1,7)
-n_samp <- 100
+n_samp <- 3000
 kappa <- as.matrix(y-0.5,ncol=1)
 beta_samples <- matrix(NA, nrow = n_samp, ncol = 7)
 beta_samples[1,] <- betas
@@ -99,7 +99,7 @@ for (i in 2:n_samp){
   
   for (j in 1:nrow(X)){
 
-    wi[j,i-1] <- rpg(1,X[j,]%*%beta_samples[i-1,])
+    wi[j,i-1] <- rpg(1,h=1,X[j,]%*%beta_samples[i-1,])
   }
   omega <- diag(wi[,i-1])
   #B_prior <- dmvnorm(betas,rep(1,7),diag(tau ^ 2,7), log=TRUE)
@@ -119,6 +119,26 @@ for (i in 2:n_samp){
 ```
 
 
+Inefficiency factor of MCMC
+
+$$IF = 1 + 2 \cdot \sum_{k=1} ^\inf\rho_k  $$
+
+where $\rho_k = Corr(\thetaî,\theta^{(i+k)})$
+
+
+```{r}
+
+# sum of the autocorrelations for the samples, minus the first row
+sum_cor <- sum(acf(beta_samples[-1,],plot=FALSE)$acf)
+
+IF <- 1 + 2*sum_cor # calculating the IF
+
+# print
+cat('The inefficiency factor is ',IF)
+
+```
+
+There is autocorrelation within the draws but we still get a relatively low value after 3000 draws. 
 
 ## b
 Use the posterior draws from a) to compute 90% equal tail credible interval for $Pr(y=1|x)$ where x corresponds to a 38-year-old woman with 1 chils(3 years old), 12 years of education and 7 years of experience and a husband with an income of 22. A 90% equal tail credible interval (a,b) cuts the off 5% percent of the posterior probability mass to the left of a, and 5% to the right of b. 
