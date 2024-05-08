@@ -83,7 +83,7 @@ women <- read.table('WomenAtWork.dat', header=TRUE)
 # picking out the variables from the data
 y <- women$Work
 X <- as.matrix(women[,-1])
-
+set.seed(123456789)
 # creating variables that are used in the sampling
 tau <- 3
 betas <- rep(1,7)
@@ -99,9 +99,9 @@ for (i in 2:n_samp){
   
   for (j in 1:nrow(X)){
 
-    wi[j,i-1] <- rpg(1,h=1,X[j,]%*%beta_samples[i-1,])
+    wi[j,i-1] <- rpg(1,h=1,X[j,]%*%beta_samples[i-1,]) # polya gamma draws for data
   }
-  omega <- diag(wi[,i-1])
+  omega <- diag(wi[,i-1]) 
   #B_prior <- dmvnorm(betas,rep(1,7),diag(tau ^ 2,7), log=TRUE)
   
   Vw <- solve(t(X)%*%omega%*%X + solve(diag(tau ^ 2,7))) # equation for Vm
@@ -121,9 +121,9 @@ for (i in 2:n_samp){
 
 Inefficiency factor of MCMC
 
-$$IF = 1 + 2 \cdot \sum_{k=1} ^\inf\rho_k  $$
+$$IF = 1 + 2 \cdot \sum_{k=1} ^\infty\rho_k  $$
 
-where $\rho_k = Corr(\thetaî,\theta^{(i+k)})$
+where $\rho_k = Corr(\theta ^i,\theta^{(i+k)})$
 
 
 ```{r}
@@ -138,14 +138,65 @@ cat('The inefficiency factor is ',IF)
 
 ```
 
-There is autocorrelation within the draws but we still get a relatively low value after 3000 draws. 
+There is autocorrelation within the draws as we're not getting a value close to 1, we need to take around 6 times more draws then a independent draw to get the same information. 
+
+```{r}
+library(ggplot2)
+# Combine the beta_samples data into a data frame suitable for ggplot
+df <- data.frame(iteration = rep(seq_len(nrow(beta_samples)), ncol(beta_samples)),
+                 value = c(beta_samples),
+                 chain = rep(1:ncol(beta_samples), each = nrow(beta_samples)),
+                 parameter = rep(names(women)[-1], each= nrow(beta_samples)))
+
+ # creating several line plots
+plots <- ggplot(df, aes(x = iteration, y = value)) +
+  geom_line() +
+  facet_wrap(~ parameter, scales = "free_y") +
+  labs(x = "Iteration",y='') +
+  theme_bw()
+
+# Print the plots
+print(plots)
+```
+
+Looks like the parameters converge rather quickly.
+
 
 ## b
 Use the posterior draws from a) to compute 90% equal tail credible interval for $Pr(y=1|x)$ where x corresponds to a 38-year-old woman with 1 chils(3 years old), 12 years of education and 7 years of experience and a husband with an income of 22. A 90% equal tail credible interval (a,b) cuts the off 5% percent of the posterior probability mass to the left of a, and 5% to the right of b. 
 
 ```{r}
+x_woman <- c(1,22,12,7,38,1,0) # creating the woman
 
+woman_pred <- c() # vector for predictions
+
+
+  
+# the logistic regression function conjugate to get prob of not working
+woman_pred <- (exp(x_woman%*%t(beta_samples[-1,]))/((1+exp(x_woman%*%t(beta_samples[-1,])))))
+  
+
+
+hist(woman_pred)
 ```
+
+```{r}
+colMeans(beta_samples)
+```
+
+
+The highest density is around 25% that the woman would be working, which most likely is because she has a small child as that parameter has the largest absolute posterior mean value. 
+
+
+```{r}
+df_q <- data.frame(quantile(woman_pred, c(0.05, 0.95)))
+
+colnames(df_q) <-' ' 
+
+knitr::kable(df_q,digits=3, caption="10% Equal tail interval")
+```
+
+5 percent of the posterior probability mass is below 11.6% and above 39.7%.
 
 
 
@@ -411,7 +462,7 @@ plot(x=c(1:250), y=xmat[,1],type='l')
 lines(xmat[,21], col='red')
 ```
 
-The value of phi makes how xt should depend on the previous value, positive/negative and how much it should depend on it. 
+The value of phi makes how xt should depend on the previous value, positive/negative autokorrelation, we can see that -1(black line) creates the time serie that goes from + to - every other value which indicates negative autocorrelation and that phi = 1 makes the red line where the values follow each other closly and have a high autocorrelation.
 
 ## b)
 
