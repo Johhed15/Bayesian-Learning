@@ -7,8 +7,11 @@
 # Lab 1
 
 * Bernoulli, Log-Normal and von Mises distribution
+  
 * Bayesian inference
+  
 * Posterior draws, Odds, Gini index
+  
 * HPDI and equal area credible interval
 
 
@@ -18,11 +21,16 @@
 
 * Logistic regression, classifying if a person work or not
 
-* 
+  
 
 # Lab 3 
 
-# Lab 4
+* Gibbs sampling for Logistic regression, augumented data
+
+* Metropolis ranwom walk for Poisson regression, simulate posteriors
+
+*  times series in Stan, synthetic data and Autoregressive(1) models
+
 
 
 
