@@ -339,9 +339,9 @@ posterior <- function(k){
 
 ```{r}
 # applying a grid of k values for the posterior function
-posterior_3 <- sapply(seq(0.01,10,length.out=1000),posterior)
+posterior_3 <- sapply(seq(0.01,10,by=0.01),posterior)
 
-norm <- posterior_3/sum(posterior_3)
+norm <- posterior_3/(sum(posterior_3)*0.01)
 plot(seq(0.01,10,length.out=1000),norm, type='l')
 ```
 

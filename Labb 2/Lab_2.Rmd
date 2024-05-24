@@ -212,7 +212,11 @@ $$\Omega_n = X^tX+\Omega_0$$
 
 $$v_n = v_0 + n$$
 
-$$v_n\sigma_n^2 = v_0\sigma^2_0 + (y^ty + \mu_o^t\Omega_0\mu_0 - \mu_n^t \Omega_n \mu_n)$$  
+$$v_n\sigma_n^2 = v_0\sigma^2_0 + (y^ty + \mu_o^t\Omega_0\mu_0 - \mu_n^t \Omega_n \mu_n)$$
+
+Deviding by *vn* to get $\sigma^2$ on one side :
+
+$$\sigma_n^2 = \frac{v_0\sigma^2_0 + (y^ty + \mu_o^t\Omega_0\mu_0 - \mu_n^t \Omega_n \mu_n)}{v_n}$$
   
 ```{r}
 # creating empty matrices for posteriors
@@ -220,6 +224,9 @@ betaPost <- matrix(ncol = 3, nrow = 1000)
 sigmaPost <- matrix(ncol = 1, nrow = 1000)
 
 mu_n <- matrix(ncol = 1, nrow = 1000)
+y <- matrix(lin$temp)
+X <- matrix(c(rep(1,nrow(lin)),lin$time,lin$time^2),ncol=3)
+beta_hat <- solve(t(X) %*% X) %*% t(X)%*% lin$temp
 
 # X matrix
 X_mat <- matrix(c(rep(1, 365), lin$time, lin$time^2), ncol = 3)
@@ -240,13 +247,13 @@ v_n <- v0 + n # sigma posterior mean
 for (i in 1:1000){
   
   # beta posterior mean
-  mu_n <- solve(xTx + omega0) %*% (xTx %*% beta[i,] + omega0 %*% t(mu0)) 
+  mu_n <- solve(xTx + omega0) %*% (xTx %*% beta_hat + omega0 %*% t(mu0)) 
   
   # df, sigma posterior
-  vSigma_n <- v0 * sigma0 + (yTy + mu0 %*% omega0 %*% t(mu0)) - (t(mu_n) %*% omega_n %*% mu_n) 
+  vSigma <- (v0 * sigma0 + (yTy + mu0 %*% omega0 %*% t(mu0)) - (t(mu_n) %*% omega_n %*% mu_n))/v_n 
   
   # joint sigma posterior distribution
-  sigmaPost[i] <- (vSigma_n) / rchisq(1, v_n) 
+  sigmaPost[i] <- (vSigma) / rchisq(1, v_n) 
   
   # joint beta posterior distribution
   betaPost[i,] <- rmvnorm(1, mu_n, sigma = sigmaPost[i]*solve(omega_n)) 
@@ -261,7 +268,7 @@ for (i in 1:1000){
 {hist(betaPost[,3], main = "beta2 posterior"); hist(sigmaPost, main = "sigma posterior")}
 ```
 
-The individual posterior parameters follow a normal distribution, except the $\sigma^2$ which has a distribution skewed to the right.
+The individual posterior parameters and sigma follow a normal distribution and are close to the prior values as our prior is strong.
 
 ### ii. Scatter plot of temperatures and overlay a curve for posterior median
 
@@ -303,7 +310,10 @@ lines(x = lin$time, y = eqtiPost[,1], col = "green", lwd = 2, lty = "dashed") # 
 lines(x = lin$time, y = eqtiPost[,2], col = "royalblue", lwd = 2, lty = "dashed") # curve for the upper quantile
 ```
 
-The posterior probability intervals do contain a good amount of data for a large part of time, however not perfect. The model is limited in that it only is a quadratic model for data seemingly looking to be more complex, thus the posterior can only be optimized to a certain point. An equal tail interval means the same density mass is outside both boundaries.
+The posterior probability intervals do contain a good amount of data for a large part of time.
+
+*You are plotting the 90% intervals around the median function, so that is
+not supposed to cover the actual data points, but the uncertainty about the median value.*
 
 
 
