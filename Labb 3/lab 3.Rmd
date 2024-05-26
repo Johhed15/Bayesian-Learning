@@ -75,6 +75,33 @@ Consider again the logistic regression model in problem 2 from the previous comp
 
 Implement (code!) a Gibbs sampler that simulates from the joint posterior $p(w,\beta|x)$ by augmenting the data with Polya-gamma latent variables $w_i, i = 1 \ldots n$. The full conditional posteriors are given on the slides from Lecture 7. Evaluate the convergence of the gibbs sampler by calculating the Inefficienty Factors(IFs) and by plotting the trajectories of the samples Markov chains.
 
+DATA augumentation logistic regression:
+
+$$Pr(y_i=1|v_i,\beta) = \frac{exp(c_i^T\beta)}{1 + exp(x_i^T\beta)}$$
+
+The posterior is unknown, augment with polya-gamma
+
+$$w_i = \frac{1}{2\pi^2} \sum_{k=1}^\infty\frac{g_k}{(k-\frac{1}{2})+ \frac{(x_i^T\beta)^2}{4\pi^2}}$$
+
+where g_k are independent draws from exp distribution with mean 1.
+
+simulate tje joint posterior p(w,B|y)
+
+$$w_i|\beta \sim PG(1,x_i^t\beta), i=1,\ldots,n$$
+
+$$\beta|y,w \sim N(m_w,V_w)$$
+
+where:
+$$V_w = (X^T\Omega X + B^{-1})^{-1}$$
+
+$$m_w = V_w(X^T \kappa + B^{-1} b$$
+
+kappa is a vector of (y_1-(1/2)....y_n-(1/2))
+
+$\Omega$ is the diagonal matrix of w_i
+
+
+
 
 
 ```{r}
@@ -123,22 +150,31 @@ Inefficiency factor of MCMC
 
 $$IF = 1 + 2 \cdot \sum_{k=1} ^\infty\rho_k  $$
 
-where $\rho_k = Corr(\theta ^i,\theta^{(i+k)})$
+where 
+
+$$\rho_k = Corr(\theta ^i,\theta^{(i+k)}) $$
+
+
 
 
 ```{r}
 
+sum_cor <- matrix(0,ncol=7)
 # sum of the autocorrelations for the samples, minus the first row
-sum_cor <- sum(acf(beta_samples[-1,],plot=FALSE)$acf)
+for (i in 1:ncol(beta_samples)){
+sum_cor[,i] <- sum(acf(beta_samples[-1,i],plot=FALSE)$acf)
+}
 
 IF <- 1 + 2*sum_cor # calculating the IF
 
+IF <- data.frame(IF)
+colnames(IF) <- c('b0','b1','b2','b3','b4','b5','b6')
 # print
-cat('The inefficiency factor is ',IF)
+knitr::kable(IF)
 
 ```
 
-There is autocorrelation within the draws as we're not getting a value close to 1, we need to take around 6 times more draws then a independent draw to get the same information. 
+There is autocorrelation within the draws as we're not getting a value close to 1, we need to take around 6 times more draws then a independent draw to get the same information for beta_3, which have the highest factor of all parameters. 
 
 ```{r}
 library(ggplot2)
