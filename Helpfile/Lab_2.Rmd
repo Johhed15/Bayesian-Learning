@@ -1,0 +1,592 @@
+---
+title: "Computer lab 2"
+date: "`r Sys.Date()`"
+author: "Johannes Hedström & Mikael Montén "
+output:
+  pdf_document:
+    latex_engine: xelatex
+    fig_caption: yes
+    number_sections: yes
+  html_document:
+    df_print: paged
+geometry: top=100pt,bottom=100pt,left=68pt,right=66pt
+header-includes:
+- \usepackage{float}
+- \usepackage{longtable}
+- \usepackage{caption}
+- \usepackage{fancyhdr}
+- \usepackage{titling}
+- \renewcommand{\headrulewidth}{0pt}
+- \renewcommand{\and}{\\}
+- \pretitle{\centering\vspace{0cm}{732A73 Bayesian Learning \par}\vspace{5cm}\Huge\textbf}
+- \posttitle{\vspace{1cm}\large\textbf{}\par}
+- \preauthor{\centering\vspace{4cm}\normalsize}
+- \postauthor{\par\vspace{2cm}}
+- \predate{\centering{\normalsize STIMA \\
+  Department of Computer and Information Science \\ Linköpings universitet \par}}
+- \postdate{\par\vspace{0cm}}
+- \raggedbottom
+---
+
+
+<!-- page number pos -->
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+\pagestyle{fancy}
+
+<!-- no page nr on first page  -->
+\pagenumbering{gobble}
+
+<!-- Anger sidbrytning -->
+\clearpage
+
+<!-- creating the table of contents -->
+\setcounter{tocdepth}{3}
+\tableofcontents
+
+<!-- new page -->
+\clearpage
+
+<!-- starting the count on 1 after the contents -->
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, fig.width = 5, fig.height = 3, fig.align = 'center')
+set.seed(12345)
+```
+
+```{r}
+library(coda)
+library(readxl)
+library(mvtnorm)
+library(tidyr)
+library(knitr)
+```
+
+
+```{r}
+# loading the data
+lin <- read_excel("Linkoping2022.xlsx")
+
+women <- read.table('WomenAtWork.dat', header=TRUE)
+
+```
+
+
+
+# Linear and polynomial regression
+
+The dataset Linkoping2022.xlsx contains daily average temperatures (in degree Celcius) in Linköping over the course of the year 2022. Use the function read_xlsx(),
+which is included in the R package readxl (install.packages("readxl")), to import the dataset in R. The response variable is temp and the covariate time that you need
+to create yourself is defned by
+
+$$time = \frac{\text{the number of days since the beginning of the year}}{\text{365}}$$
+
+A Bayesian analysis of the following quadratic regression model is to be performed:
+
+$$temp = \beta_0 + \beta_1 \cdot time + \beta_2 \cdot time^2 + \epsilon , \space\space \epsilon \overset{iid}{\sim}  N(0,\sigma ^2)$$
+```{r}
+# creating the time variable, number of days since the beginning of the year divided by 365
+lin$time <- as.numeric((as.Date(lin$datetime) - as.Date("2022-01-01"))/365)
+```
+
+## a
+
+Use the conjugate prior for the linear regression model. The prior hyperparameters $\mu_0$, $\Omega _0$, $v_0$ and $\sigma^2_0$ shall be set to sensible values. Start with
+$\mu_0= (0, 100, −100)^T, \Omega_0 = 0.01 \cdot I_3, v_0 = 1$ and $\sigma_0^2 =1$. Check if this prior agrees with your prior opinions by simulating draws from the joint prior
+of all parameters and for every draw compute the regression curve. This gives a collection of regression curves; one for each draw from the prior. Does the collection of curves look reasonable? If not, change the prior hyperparameters until the collection of prior regression curves agrees with your prior beliefs
+about the regression curve. [Hint: R package mvtnorm can be used and your $Inv-\chi^2$ simulator of random draws from Lab 1.]
+
+Using a conjugate prior, the joint priors for $\beta$ and $\sigma^2$ is
+
+$$\beta^2 | \sigma^2 \sim N(\mu_0, \sigma^2 \Omega_0^{-1})$$
+
+$$\sigma^2 \sim Inv- \chi^2(v_0, \sigma^2_0)$$
+
+```{r}
+set.seed(123456789)
+# creating the variables
+mu0 <- t(c(0, 100, -100))
+omega0 <- diag(0.01, nrow=3,ncol=3)
+v0 <- 1
+sigma0 <- 1
+n <- nrow(lin)
+
+beta <- matrix(ncol=3, nrow=1000)
+sigma <- matrix(ncol=1, nrow=1000)
+for (i in 1:1000){
+  # joint prior for sigma, this is the inv-chi2 simulator from lab 1
+  sigma[i] <- (v0*sigma0)/rchisq(1,v0) 
+  
+  # joint prior for beta
+  beta[i,] <- rmvnorm(1,mean=mu0,sigma[i]*solve(omega0)) 
+}
+
+```
+
+```{r}
+# regression curves 
+
+reg_matrix <- matrix(ncol=nrow(lin), nrow=1000)
+
+for (i in 1:1000){
+  
+  # temp = b0 + b1*time + b2*time^2 + e, e ~ N(0, sigma^2)
+  reg_matrix[i,] <- beta[i,1] + beta[i,2] *lin$time + beta[i,3]*lin$time^2 + rnorm(1,0,sigma[i])
+  
+}
+
+
+plot(n, xlim=c(0,1),ylim=c(-40,60), xlab = "Time", ylab = "Temp")
+for (i in 1:1000){
+  lines(x=lin$time,y=reg_matrix[i,], col = "black")
+}
+lines(lin$temp, x=lin$time, type='l', col = "red", lwd = 1.5)
+```
+
+The initial values gives shows a plot that is badly defined and the only inference really is that values of $[-40, 60]$ degrees are very frequent. We can therefore conclude the collection of curves does not look reasonable. The red curve shows the temperature measured and the black lines are the estimated curves. From this, we decided to change the values; $v_0= 150, \sigma_0^2= 1, \Omega_0 =1 \cdot I_3, \mu_0 = (-10, 120, -120)^T$.
+
+
+```{r}
+set.seed(123456789)
+# creating the variables
+mu0 <- t(c(-10,120,-120))
+omega0 <- diag(1, nrow=3,ncol=3)
+v0 <- 150
+sigma0 <- 1
+```
+
+
+```{r, echo = FALSE}
+n <- nrow(lin)
+
+beta <- matrix(ncol=3, nrow=1000)
+sigma <- matrix(ncol=1, nrow=1000)
+for (i in 1:1000){
+  sigma[i] <- (v0*sigma0)/rchisq(1,v0) # joint prior for sigma, this is the inv-chi2 simulator from lab 1
+
+  beta[i,] <- rmvnorm(1,mean=mu0,sigma[i]*solve(omega0)) # joint prior for beta
+}
+
+# regression curves 
+
+reg_matrix <- matrix(ncol=nrow(lin), nrow=1000)
+
+for (i in 1:1000){
+  
+  # temp = b0 + b1*time + b2*time^2 + e, e ~ N(0, sigma^2)
+  reg_matrix[i,] <- beta[i,1] + beta[i,2] *lin$time + beta[i,3]*lin$time^2 + rnorm(1,0,sigma[i])
+  
+}
+
+
+plot(n, xlim=c(0,1),ylim=c(-10,30), xlab = "Time", ylab = "Temp")
+for (i in 1:1000){
+  lines(x=lin$time,y=reg_matrix[i,], col = "black")
+}
+lines(lin$temp, x=lin$time, type='l', col = "red", lwd = 1.5)
+```
+
+The results we got from changing the values are more reasonable. The curve now follows a distinct pattern and seems to capture the seasonal change in temperature in Linköping over the year. The intercept is at -10 where the true temperature is slightly higher and towards springtime the temperature is lower than the estimates for a short while, other than that its a good estimate of the true temperatures. It captures the higher temperatures during summer months and lower during winter months well.
+
+
+## b
+
+Write a function that simulate draws from the joint posterior distribution of $\beta_0, \beta_1 , \beta_2, \sigma^2$.
+
+  i. Plot a histogram for each marginal posterior of the parameters.
+  
+  ii. Make a scatter plot of the temperature data and overlay a curve for the
+  posterior median of the regression function $f(time) = E [temp|time] = \beta_0 + \beta_1 · time + \beta_2 · time²$ , i.e. the median of      f(time) is computed for every value of time . In addition, overlay curves for the 90% equal tail posterior probability intervals of f(time)   ,i.e. the 5 and 95 posterior percentiles of f(time) is computed for every value of time . Does the posterior probability intervals contain   most of the data points? Should they?
+  
+Posteriors for the conjugate prior are
+
+$$\beta | \sigma^2,y \sim N[\mu_n, \sigma^2\Omega_n^{-1}]$$
+
+$$\sigma ^2 | y \sim Inv - \chi^2 (v_n,\sigma_n^2)$$
+
+$$\mu_n = (X^tX+\Omega_0)^{-1}(X^tX\hat\beta + \Omega_o\mu_0)$$
+
+$$\Omega_n = X^tX+\Omega_0$$
+
+$$v_n = v_0 + n$$
+
+$$v_n\sigma_n^2 = v_0\sigma^2_0 + (y^ty + \mu_o^t\Omega_0\mu_0 - \mu_n^t \Omega_n \mu_n)$$
+
+Deviding by *vn* to get $\sigma^2$ on one side :
+
+$$\sigma_n^2 = \frac{v_0\sigma^2_0 + (y^ty + \mu_o^t\Omega_0\mu_0 - \mu_n^t \Omega_n \mu_n)}{v_n}$$
+  
+```{r}
+# creating empty matrices for posteriors
+betaPost <- matrix(ncol = 3, nrow = 1000)
+sigmaPost <- matrix(ncol = 1, nrow = 1000)
+
+mu_n <- matrix(ncol = 1, nrow = 1000)
+y <- matrix(lin$temp)
+X <- matrix(c(rep(1,nrow(lin)),lin$time,lin$time^2),ncol=3)
+beta_hat <- solve(t(X) %*% X) %*% t(X)%*% lin$temp
+
+# X matrix
+X_mat <- matrix(c(rep(1, 365), lin$time, lin$time^2), ncol = 3)
+
+# X'X
+xTx <- t(X_mat) %*% X_mat
+
+# y matrix
+y_mat <- matrix(lin$temp)
+
+# y'y
+yTy <- t(y_mat) %*% y_mat
+
+
+omega_n <- xTx + omega0 # beta posterior variance
+v_n <- v0 + n # sigma posterior mean
+
+for (i in 1:1000){
+  
+  # beta posterior mean
+  mu_n <- solve(xTx + omega0) %*% (xTx %*% beta_hat + omega0 %*% t(mu0)) 
+  
+  # df, sigma posterior
+  vSigma <- (v0 * sigma0 + (yTy + mu0 %*% omega0 %*% t(mu0)) - (t(mu_n) %*% omega_n %*% mu_n))/v_n 
+  
+  # joint sigma posterior distribution
+  sigmaPost[i] <- (vSigma) / rchisq(1, v_n) 
+  
+  # joint beta posterior distribution
+  betaPost[i,] <- rmvnorm(1, mu_n, sigma = sigmaPost[i]*solve(omega_n)) 
+}
+
+```
+
+### i. Plot a histogram of each marginal posterior of the parameters
+
+```{r}
+{hist(betaPost[,1], main = "beta0 posterior"); hist(betaPost[,2], main = "beta1 posterior")}
+{hist(betaPost[,3], main = "beta2 posterior"); hist(sigmaPost, main = "sigma posterior")}
+```
+
+The individual posterior parameters and sigma follow a normal distribution and are close to the prior values as our prior is strong.
+
+### ii. Scatter plot of temperatures and overlay a curve for posterior median
+
+```{r}
+# calculate posterior
+regressionPost <- matrix(ncol=nrow(lin), nrow=1000)
+
+for (i in 1:1000){
+  # calculate posterior according to the regression formula
+  regressionPost[i,] <- betaPost[i,1] + betaPost[i,2] *lin$time + betaPost[i,3]*lin$time^2
+  
+}
+
+# posterior median
+medianPost <- c()
+
+for(i in 1:365){
+  
+  # calculate median for every day
+  medianPost[i] <- median(regressionPost[,i])
+  
+}
+
+# 90% equal tail interval
+eqtiPost <- matrix(nrow = 365, ncol = 2)
+
+for(i in 1:365){
+  
+  eqtiPost[i,1] <- quantile(regressionPost[,i], c(0.05, 0.95))[1]
+  eqtiPost[i,2] <- quantile(regressionPost[,i], c(0.05, 0.95))[2]
+}
+```
+
+
+```{r}
+plot(lin$temp, x=lin$time, xlim=c(0,1),ylim=c(-20,30), col = "black", pch = 1) # scatter plot of temperature data
+lines(x=lin$time,y=medianPost, col = "red", lwd = 2) # curve for posterior median of regression function
+lines(x = lin$time, y = eqtiPost[,1], col = "green", lwd = 2, lty = "dashed") # curve for the lower quantile
+lines(x = lin$time, y = eqtiPost[,2], col = "royalblue", lwd = 2, lty = "dashed") # curve for the upper quantile
+```
+
+The posterior probability intervals do contain a good amount of data for a large part of time.
+
+*You are plotting the 90% intervals around the median function, so that is
+not supposed to cover the actual data points, but the uncertainty about the median value.*
+
+
+
+## c
+
+It is of interest to locate the time with the highest expected temperature (i.e.
+the time where f(time) is maximal). Let's call this value $\bar{x}$. Use the simulated
+draws in (b) to simulate from the posterior distribution of $\bar{x}$. [Hint: the
+regression curve is a quadratic polynomial. Given each posterior draw of $\beta_0, \beta_1, \beta_2$, you can find a simple formula for $\bar{x}$.
+
+
+A simple formula for calculating the expected maximum of a quadratic function is by calculating it's derivative and finding the day for where it's closest to 0.
+
+Our polynomial regression has formula 
+
+$$f(time) = \beta_0 + \beta_{1,i} \cdot time + \beta_{2,i}\cdot time^2$$
+With derivative of 
+
+$$f'(time) = \beta_{1,i} + 2 \cdot \beta_{2 ,i}\cdot time$$
+
+```{r}
+derivPost <- matrix(ncol = 1, nrow = 1000)
+
+
+for(i in 1:1000){
+  # for each days derivative, take min of abs value to find nearest to zero
+  derivPost[i,] <- lin$time[which.min(abs(betaPost[i,2] + 2*betaPost[i,3]*lin$time))] 
+}
+
+# posterior distribution of highest expected temperature
+hist(derivPost, main = "Time with highest expected temperature", xlab = "Time")
+```
+
+The temperature is the higest at almost precisely 0.5, i.e. half of the year gone by. This makes sense as it would place us in the midst of the summer months. To confirm this, we can plot the curve and index the element of the derivation closest to zero.
+
+```{r}
+plot(lin$temp, x=lin$time, xlim=c(0,1),ylim=c(-20,30), col = "black"); lines(x=lin$time,y=medianPost, col = "red", lwd = 2)
+
+# the time (i.e element) that has derivative closest to zero
+derivMax <- max(table(derivPost)) 
+
+abline(v = lin$time[derivMax], col = "darkgreen") # derivative closest to zero according to each day
+```
+
+The vertical line shows where on the curve the highest expected temperature should fall according to the derivative. This happens at the maximum of the curve which is expected.
+
+## d
+
+Say now that you want to estimate a polynomial regression of order 10 ,
+but you suspect that higher order terms may not be needed, and you worry
+about overftting the data. Suggest a suitable prior that mitigates this potential
+problem. You do not need to compute the posterior. Just write down your
+prior. [Hint: the task is to specify $\mu_0$ and $\Omega_0$ in a suitable way.]
+
+An order 10 polynomial regression has formula
+
+$$y = X_P \beta + \epsilon, \ X_P = (1, x, x^2, ..., x^{10})$$
+
+
+```{r}
+
+set.seed(123456789)
+# creating the variables
+# set zero as mu_0 values for mean of priors of beta of a higher order to get parameters close to 0
+mu0 <- t(c(-5,120,-120,0,0,0,0,0,0,0,0)) 
+
+# picking high values of omega to get lower variance of the prior
+# more certain that these parameters are 0 to reduce overfittning
+omega0 <- diag(c(1,1,1,rep(1000,8)), nrow=11,ncol=11) 
+v0 <- 150
+sigma0 <- 1
+n <- nrow(lin)
+
+beta <- matrix(ncol=11, nrow=1000)
+sigma <- matrix(ncol=1, nrow=1000)
+
+reg_matrix <- matrix(ncol=nrow(lin), nrow=1000)
+
+
+for (i in 1:1000){
+  
+  sigma[i] <- (v0*sigma0)/rchisq(1,v0) # joint prior for sigma
+
+  beta[i,] <- rmvnorm(1,mean=mu0,sigma[i]*solve(omega0)) # joint prior for beta
+
+  
+  reg_matrix[i,] <- beta[i,1] + beta[i,2] *lin$time + beta[i,3]*lin$time^2 + beta[i,4]*lin$time^3 +
+     beta[i,5]*lin$time^4 + beta[i,6]*lin$time^5 + beta[i,7]*lin$time^6 + beta[i,8]*lin$time^7 +
+    beta[i,9]*lin$time^8 + beta[i,10]*lin$time^9 + beta[i,11]*lin$time^10 +rnorm(1,0,sigma[i])
+  
+}
+
+plot(n, xlim=c(0,1),ylim=c(-10,40), xlab = "Time", ylab = "Temp")
+for (i in 1:1000){
+  lines(x=lin$time,y=reg_matrix[i,])
+}
+lines(lin$temp, x=lin$time, type='l', col="red")
+```
+
+
+Priors for polynomial regression of order 10:
+
+Low values for $mu_0$ as we want beta parameters for the higher orders to be close to 0 so we don't overfit.
+
+$$\mu_0 = (-5,120,-120,0,0,0,0,0,0,0,0) $$
+
+Since the inverse of $\Omega_0$ is used in calculation, the values should be high for the columns of the higher order to choose a prior that has high probability for these $\mu$-values.
+
+
+$$\Omega_0 = (1,1,1,1000,1000,1000,1000,1000,1000,1000,1000)$$
+
+
+\pagebreak
+
+# Posterior approximation for classification with logistic regression 
+
+The dataset WomenAtWork.dat contains n = 132 observations on the following eight
+variables related to women:
+
+```{r, echo = FALSE}
+
+knitr::kable(
+  data.frame(
+    Variable = c("Work", "Constant", "HusbandInc", "EducYears", "ExpYears", "Age", "NSmallChild", "NBigChild"),
+    `Data type` = c("Binary", "1", "Numeric", "Counts", "Counts", "Counts", "Counts", "Counts"),
+    Meaning = c("Whether or not the woman works", "Constant to the intercept", "Husband's income", "Years of education", "Years of experience", "Age", "Number of children $\\leq$ 6 years in household", "Number of children > 6 years in household"),
+    Role = c("Response y", "Feature", "Feature", "Feature", "Feature", "Feature", "Feature", "Feature")
+  ),
+  align = c("l", "c", "l", "l"),
+  caption = "Variable Information"
+)
+```
+
+
+
+## a
+
+Consider the logistic regression model:
+
+$$Pr(y=1|x,\beta) = \frac{exp(x \beta)}{1 + exp(x\beta)}$$,
+
+where y equals 1 if the woman works and 0 if she does not. x is a 7 -dimensional
+vector containing the seven features (including a 1 to model the intercept).
+The goal is to approximate the posterior distribution of the parameter vector
+$\beta$ with a multivariate normal distribution
+
+$$\beta |y,x \sim N(\tilde{\beta}, J{-1}_y (\tilde\beta))$$
+
+where $\tilde\beta$ is the posterior mode and $J(\tilde\beta) = - \frac{\partial² ln p(\beta|y)}{\partial\beta\partial\beta ^T} |_{\beta=\tilde\beta }$ is the negative of the observed Hessian evaluated at the posterior mode. Note that $\frac{\partial² ln p(\beta|y)}{\partial\beta\partial\beta ^T}$ is a 7 × 7 matrix with second derivatives on the diagonal and cross-derivatives $\frac{\partial² ln p(\beta|y)}{\partial\beta_i\partial\beta_j }$ on the off-diagonal. You can compute this derivative by hand, but we will let the computer do it numerically for you. Calculate both $\tilde\beta$ and $J(\tilde\beta)$ by using the optim function in R. [Hint: You may use code snippets from my demo of logistic regression in Lecture 6.] Use the prior $\beta \sim N(0,\tau²I)$ , where
+$\tau=2$.
+
+Present the numerical values of $\tilde\beta$ and $J_y{-1}(\tilde\beta)$ for the WomenAtWork data. Compute an approximate 95% equal tail posterior probability interval for the regression coeffcient to the variable NSmallChild. Would you say that this feature
+is of importance for the probability that a woman works? [Hint: You can verify that your estimation results are reasonable by comparing
+the posterior means to the maximum likelihood estimates, given by: glmModel<- glm(Work ~ 0 + ., data = WomenAtWork, family = binomial).]
+
+
+
+```{r}
+# picking out the variables from the data
+y <- women$Work
+X <- women[,-1]
+
+# for comparison
+glmModel<- glm(Work ~ 0 + ., data = women, family = binomial) 
+
+logisticpost <- function(betas,y,X,tau){
+  
+  B_prior <- dmvnorm(betas,rep(0,7),diag(tau ^ 2,7), log=TRUE)
+  
+  linpred <- as.matrix(X)%*%betas
+  loglik <- sum( linpred*y - log(1 + exp(linpred)) )
+  if (abs(loglik) == Inf) loglik = -20000;
+  
+  B_prior+loglik
+}
+
+tau <- 2
+
+
+betas <- rep(0,7)
+
+
+
+OptimRes <- optim(betas,logisticpost,gr=NULL,y,X,tau,method=c("BFGS"),
+                  control=list(fnscale=-1),hessian=TRUE)
+
+
+
+# Printing the results to the screen
+names(OptimRes$par) <- names(X) # Naming the coefficient by covariates
+approxPostStd <- sqrt(diag(solve(-OptimRes$hessian))) # Computing approximate standard deviations.
+names(approxPostStd) <-  names(X) # Naming the coefficient by covariates
+print('The posterior mode is:')
+print(OptimRes$par)
+
+print('GLM coefficients')
+print(glmModel$coefficients)
+
+print('The approximate posterior standard deviation is:')
+print(approxPostStd)
+
+```
+
+```{r}
+c(OptimRes$par[6] - 1.96 * approxPostStd[6],
+  OptimRes$par[6] + 1.96 * approxPostStd[6])
+```
+The feature does indeed have a big importance for the probability that a woman works. It has the largest coefficient of all covariates and the interval is always minus (i.e. does not cover 0) thus meaning it always has a negative effect for the probability that a woman works.
+And this seems reasonable as if you have small children then you might need to be at home for a couple of years unless you split the time of being at home between both parents.
+
+## b
+
+Use your normal approximation to the posterior from (a). Write a function
+that simulate draws from the posterior predictive distribution of $Pr(y = 0|x)$,
+where the values of x corresponds to a 40-year-old woman, with two children
+(4 and 7 years old), 11 years of education, 7 years of experience, and a husband
+with an income of 18. Plot the posterior predictive distribution of $Pr(y = 0|x)$
+for this woman.
+[Hints: The R package mvtnorm will be useful. Remember that $Pr(y = 0|x)$
+can be calculated for each posterior draw of $\beta$.]
+
+
+```{r}
+# values for the woman to predict if she works or not
+x_woman <- matrix(c(1,18,11,7,40,1,1),1,7)
+woman_pred <- c()
+
+for (i in 1:1000){
+  # simulating 1000 different betas from multivariate normal dist 
+  # with beta_tilde and inverese of the hessian
+  betass <- rmvnorm(1,OptimRes$par,solve(-OptimRes$hessian))
+  
+  # the logistic regression function conjugate to get prob of not working
+  woman_pred[i] <- 1- (exp(x_woman%*%t(betass))/((1+exp(x_woman%*%t(betass)))))
+  
+}
+
+
+```
+
+
+```{r}
+hist(woman_pred)
+```
+
+A women with the characteristics described has a high probability with mode around 80% to not be working. She has a small child and a big child but still young one, which could mean she is not working and instead takes care of them.
+
+
+## c
+
+Now, consider 13 women which all have the same features as the woman in
+(b). Rewrite your function and plot the posterior predictive distribution for
+the number of women, out of these 13, that are not working. [Hint: Simulate
+from the binomial distribution, which is the distribution for a sum of Bernoulli
+random variables.]
+
+
+
+
+```{r}
+
+Woman_13 <-c() 
+for (i in 1:1000){
+ # drawing 1 value per prob of 13 women 
+  
+ Woman_13[i] <- rbinom(1,13,woman_pred[i])
+  
+}
+
+hist(Woman_13)
+
+
+```
+
+
+The highest density of women not working with these attributes are at 10 of 13 women. 

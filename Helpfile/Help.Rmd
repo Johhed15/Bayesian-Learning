@@ -1,0 +1,1555 @@
+---
+title: "Bayesian Learning Exam Help File"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    fig_caption: yes
+    number_sections: yes
+  html_document:
+    df_print: paged
+geometry: top=100pt,bottom=100pt,left=68pt,right=66pt
+header-includes:
+- \usepackage{float}
+- \usepackage{longtable}
+- \usepackage{caption}
+- \usepackage{fancyhdr}
+- \usepackage{titling}
+- \renewcommand{\headrulewidth}{0pt}
+- \renewcommand{\and}{\\}
+- \pretitle{\centering\vspace{0cm}{732A73 Bayesian Learning \par}\vspace{5cm}\Huge\textbf}
+- \posttitle{\vspace{1cm}\large\textbf{}\par}
+- \preauthor{\centering\vspace{4cm}\normalsize}
+- \postauthor{\par\vspace{2cm}}
+- \predate{\centering{\normalsize STIMA \\
+  Department of Computer and Information Science \\ Linköpings universitet \par}}
+- \postdate{\par\vspace{0cm}}
+- \raggedbottom
+---
+
+
+<!-- page number pos -->
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+\pagestyle{fancy}
+
+<!-- no page nr on first page  -->
+\pagenumbering{gobble}
+
+<!-- Anger sidbrytning -->
+\clearpage
+
+<!-- creating the table of contents -->
+\setcounter{tocdepth}{3}
+\tableofcontents
+
+<!-- new page -->
+\clearpage
+
+<!-- starting the count on 1 after the contents -->
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+```{r setup, echo = TRUE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, fig.width = 5, fig.height = 3, fig.align = 'center')
+set.seed(12345)
+```
+
+```{r, echo = TRUE}
+library(coda)
+library(invgamma)
+library(coda)
+library(readxl)
+library(mvtnorm)
+library(tidyr)
+library(knitr)
+library(BayesLogit)
+library(tinytex)
+library(rstan)
+```
+
+
+# Lab 1: Daniel Bernoulli
+
+Let $y_1,...,y_n|\theta \sim Bern(\theta)$, $s = 22, n = 70$. Assume $Beta(\alpha_0, \beta_0) \ \text{prior for} \ \theta$ and $\alpha_0 = \beta_0 = 8$.
+
+```{r}
+
+s <- 22 # successes
+f <- 70 - 22 # failures 
+n <- 70 # trials
+
+# Beta priors
+A0 <- 8
+B0 <- 8
+```
+
+
+## a
+
+Draw 10000 random values from the posterior and verify graphically that the posterior mean and standard deviation converges to the true values as the number of draws grows larger.
+
+$$\text{Posterior}: \theta | y \sim Beta (\alpha_0 + s, \beta_0 +f)$$
+
+Beta distribution has expected value $E[X] = \frac{\alpha}{\alpha+\beta}$ and variance $Var[X] = \frac{\alpha \beta}{(\alpha + \beta)^2+(\alpha+\beta+1)}$. Since we know the posterior we can deduce true mean and standard deviation to be the following;
+
+$$\text{True posterior mean} = \frac{\alpha_0+s}{\alpha_0 + s + \beta_0 + f} = \frac{\alpha_0+s}{\alpha_0 + \beta_0 + n}$$
+
+$$\text{True posterior sd} = \sqrt{\frac{(\alpha_0 +s)\cdot (\beta_0+f)}{(\alpha_0 + \beta_0+n)^2(\alpha_0 + \beta_0+n +1 )}}$$
+* Draw 10000 random values from the posterior and calculate sample means & standard deviations as functions of accumulating number of drawn values
+```{r}
+
+nDraws <- 10000 # nr of draws
+
+true_mean <- (A0 +s) / (A0 + B0 + n) # calculating true mean and sd for posterior dist
+true_sd  <- sqrt(((A0+s)*(B0+f))/((A0+B0+n)^2 * (A0+ B0+n+1)))
+
+posterior_sample <- rbeta(nDraws,A0+s,B0+f) # draw values from posterior
+
+# Calculate sample cumulative means and standard deviations to show convergence
+sample_means <- cumsum(posterior_sample)/(1:nDraws)
+sample_sds <- sqrt(cumsum((posterior_sample - sample_means)^2) / (1:nDraws))
+
+```
+
+* Verify graphically that the posterior mean converges
+```{r}
+plot(sample_means,type='line',xlab='Ndraws',ylab='Sample mean', main='Graph over sampled means')
+abline(h=true_mean,col='red')
+```
+
+There is a short burn-in of around 1000 draws before the sample mean of $\theta$ stabilizes and it converges to the true posterior mean after around 2000 draws.
+
+\pagebreak
+* Verify graphically that the posterior sd converges
+```{r}
+plot(sample_sds,type='line',xlab='Ndraws',ylab='Sample sd', main='Graph over sampled sds')
+abline(h=true_sd,col='red')
+```
+
+The sample standard deviation of $\theta$ stabilizes after around 1000 draws but doesn't fully converge to the true posterior standard deviation until around 5000 draws.
+
+## b
+
+Draw 10000 random values from the posterior and compute the posterior probability $Pr(\theta > 0.3|y)$ and compare with the exact value from the Beta posterior.
+
+```{r}
+set.seed(12345)
+
+# draws from posterior
+post <- rbeta(nDraws, A0+s, B0+f)
+
+# mean of samples over 0.3
+prob <- mean(post>0.3)
+
+
+prob_exact <- 1 - pbeta(0.3,A0+s, B0+f) 
+
+df <- data.frame('Posterior prob' =prob, 'Exact value from beta post' = prob_exact)
+colnames(df) <- c('Posterior prob','Exact value from beta post')
+
+knitr::kable(df)
+
+```
+
+The approximate posterior probability of $\theta$ > 0.3 given y is 0.8294 which is very close to the exact value from the beta posterior 0.8286. The exact probability is found with the conjugate as pbeta calculates $P(\theta \leq 0.3)$ whereas we are interested in $P(\theta > 0.3)$.
+
+## c
+
+Draw 10000 random values from the posterior of the odds $\phi = \frac{\theta}{1-\theta}$ by using the previous random draws from the Beta posterior for $\theta$ and plot the posterior distribution of $\phi$.
+
+```{r}
+odds <- post / (1- post)
+
+hist(odds)
+
+plot(density(post), main = "Density of posterior"); plot(density(odds), main = "Density of odds posterior")
+```
+
+The odds ratio transformation slightly skews the distribution to the right and the distribution is also wider with less density concentration around the mean.
+
+\pagebreak
+# Lab 1: Log-normal distribution and the Gini coefficient.
+
+Assume that you have asked 8 randomly selected persons about their montlhy income (in thousands SEK) and obtained the observations below. A common model for non-negative continuous variables is the log-normal distribution $\log N(\mu, \sigma^2)$ has density function $$p\left(y \mid \mu, \sigma^2\right)=\frac{1}{y \cdot \sqrt{2 \pi \sigma^2}} \exp \left[-\frac{1}{2 \sigma^2}(\log y-\mu)^2\right]$$
+
+where $y > 0$, $-\infty < \mu < \infty$ and $\sigma^2 > 0$. Log-normal distribution is related to the normal distribution as: $$\text{if} \ y \sim \log N(\mu, \sigma^2) \ \text{then} \ \log y \sim N(\mu, \sigma^2) $$ 
+
+Let $y$ be log-normal distributed where $\mu = 3.6$ is assumed to be known but variance $\sigma^2$ is unknown with non-informative prior $p(\sigma^2) \propto 1/\sigma^2$. The posterior for $\sigma^2$ is the $Inv - \chi^2(n,\tau^2)$ where $$\tau^2 = \frac{\sum^n_{i=1} (\log y_i-\mu)^2}{n}$$
+
+```{r}
+
+income <- c(33,24,48,32,55,74,23,17) # observated incomes
+
+# tau distribution
+tau2 <- function(y,n,mu){
+  
+  sum((log(y)-mu)^2)/n
+}
+```
+
+
+
+## a
+Draw 10000 random values from the posterior of $\sigma^2$ by assuming $\mu = 3.6$ and plot the posterior distribution.
+
+$\text{Posterior} \ \sigma^2 = \frac{n \cdot \tau^2}{X} \ \text{where} \ X \sim \chi^2(n)$ due to $\tau^2$ having $n$ degrees of freedom.
+
+```{r}
+
+n <- 8 # amount of observed incomes
+mu <- 3.6
+
+tau <- tau2(income,n,mu) # tau calculated using mu
+
+post_sigma <- n*tau/rchisq(10000,n)
+
+```
+
+
+```{r}
+plot(density(post_sigma),main="Posterior sigma density",xlim=c(0,1))
+
+```
+
+Posterior $\sigma^2$ has a right skewed density with mode at slightly below 0.2.
+
+
+## b
+
+Most common measure of income inequality is Gini coefficient, $0 < G < 1$, where $G = 0$ is a completely equal income distribution and $G=1$ completely inequal. It can be shown that,
+
+$$G= 2 \Phi (\sigma / \sqrt{2})-1 \ \text{when income is distributed} \ \log N(\mu, \sigma^2)$$
+$\Phi(z)$ is the cdf for the standard normal distribution with mean zero and unit variance. Use the posterior draws in a) to compute the posterior distribution of the Gini coefficient $G$ for the current data.
+
+
+```{r}
+gini <- 2*pnorm(q=sqrt(post_sigma)/sqrt(2), mean=0, sd=1) -1
+
+plot(density(gini), main = "Gini coefficient posterior distribution")
+```
+
+The Gini distribution has a slight right skewed income with a mode at around 0.25. This indicates that income is distributed rather equally for the subjects but a low amount making substantially more than the others. 
+
+## c
+
+Use the posterior draws from b) to compute a 95% equal tail credible interval for $G$. A 95% equal tail credible interval $(a,b)$ cuts of $2.5%$ of the posterior probability mass to the left of $a$, and to the right of $b$.
+
+```{r}
+eti <- quantile(gini,c(0.025,0.975))
+
+knitr::kable(eti,col.names = 'Interval')
+```
+
+This interval shows the probability of the Gini coefficient $G$ being outside of this interval as 2.5% per side, or 5% in total. The equal tail show the same density outside the interval on both sides.
+
+## d
+Use the posterior draws from b) to compute a 95% HPDI for $G$. Compare the two intervals in c) and d). 
+
+```{r}
+set.seed(12345)
+gini_dens <- density(gini) # kernel density estimate of G posterior
+
+sort_dens <- sort(gini_dens$y,decreasing=TRUE) # order the estimated density values
+
+cdf <- cumsum(sort_dens)/sum(sort_dens) # cdf of sorted G posterior
+
+cdf <- cdf[cdf<0.95] # 95% of the cdf
+
+# subset the coordinates of points with highest pdf for 95% of cdf
+index <- gini_dens$x[order(gini_dens$y,decreasing=TRUE)][1:length(cdf)] 
+
+vals <- data.frame("min" = min(index), "max" = max(index))
+knitr::kable(vals, col.names = c("min", "max"))
+```
+
+The above values show the min and max values for the HPDI, i.e. the interval for $\theta$-values with the highest pdf.
+
+\pagebreak
+```{r}
+set.seed(12345)
+df2 <- data.frame(rbind(vals,eti))
+rownames(df2) <- c('HPDI', 'ETCI')
+knitr::kable(df2,caption = 'Comparison between the intervals')
+
+```
+
+
+```{r}
+
+plot(gini_dens, main='Gini-coef', xlim = c(0,0.8))
+abline(v=eti[1],col='green')
+abline(v=eti[2], col='green')
+abline(v=vals[1],col='red')
+abline(v=vals[2],col='red')
+```
+
+The table and figure above indicate the differences between the intervals. In the plot, the green lines show the 95% EQTI and the red lines the HPDI. The HPDI is slightly narrower than the EQTI, and is also located more to the left. In the figure this is visualized clearly, and the resulting gain of density is also shown. Whereas the EQTI disregards alot of density on the lower side of the distribution, the HPDI picks this up for a smaller loss of density at the higher side.
+
+
+
+# Lab 1: Bayesian inference for the concentration parameter in the von Mises distribution
+
+This exercise is concerned with directional data and the point is to show that the posterior distribution for somewhat weird models can be obtained by plotting it over a grid of values. The data points are observed wind direction at a given location on ten different days and are recorded in degrees as $20, 314, 285, 40, 308, 314, 299, 296, 303, 326$.
+
+North is located at zero degrees. According to Wikipedias description of probability distributions for circular data we convert the data into radian $- \pi \leq y \leq \pi$. The observations in radians are $-2.79, 2.33, 1.83, -2.44, 2.23, 2.33, 2.07, 2.02, 2.14, 2.54$
+
+Assume that these data points conditional on $(\mu, \kappa)$ are independent observations from the following
+
+$$\text{von Mises distribution}: p(y \mid \mu, \kappa)=\frac{\exp [\kappa \cdot \cos (y-\mu)]}{2 \pi I_0(\kappa)},-\pi \leq y \leq \pi$$
+where $I_0(\kappa)$ is the modified Bessel function of the first kind of order zero (?besselI in R). The parameter $\mu (-\pi < \mu < \pi)$ is the mean direction and $\kappa > 0$ is called the concentration parameter. Large $\kappa$ gives a small variance around $\mu$, and vice versa. Assume that $\mu$ is known to be 2.4. Let $\kappa \sim Exponential(\gamma = 0.5)$ a priori, where $\gamma$ is the rate parameter of the exponential distribution (so that the mean is $1/\gamma$).
+
+## a) 
+
+Derive the expression for what the posterior $p(\kappa | y, \mu)$ is proportional to. Hence, derive the function $f(\kappa)$ such that $p(\kappa |y, \mu) \propto f(\kappa)$. Then, plot the posterior distribution of $\kappa$ for the wind direction data over a fine grid of $\kappa$ values.
+
+
+$$p(y \mid \mu, \kappa)=\prod_{i=1}^{n}{ \frac{\exp [\kappa \cdot \cos (y-\mu)]}{2 \pi I_0(\kappa)}}$$
+
+
+$$\frac{1}{(2 \pi I_0(\kappa))^n}\cdot \exp(\kappa \cdot\sum^n_{i=1} \cos (y-\mu))$$
+
+$$\frac{1}{(2 \pi)^n}\cdot \frac{1}{(I_0(\kappa))^n}\cdot \exp (\kappa \cdot \sum^n_{i=1}\cos (y-\mu))$$
+
+$$\text{This is a constant and can therfore be ignored} = \frac{1}{(2 \pi)^n}$$
+
+
+$$\text{Likelihood = }\frac{ \exp (\kappa \cdot \sum^n_{i=1} \cos (y-\mu))}{(I_0(\kappa))^n}\cdot$$
+
+$$\text{A priori,} \  \kappa \sim Exp(\gamma=0.5) \implies \text{Prior}=p(\kappa) \propto \lambda e ^{-\lambda \kappa} = 0.5e^{0.5 \kappa}$$
+
+
+$$\text{Posterior}= p(\kappa \mid y, \mu) \propto p(y \mid \mu, \kappa) \cdot p(\kappa) = \frac{ \exp (\kappa \cdot \sum^n\cos (y-\mu))}{(I_0(\kappa))^n} \cdot \lambda e ^{-\lambda \kappa}$$
+$\lambda = 0.5$ is a constant and can be ignored.
+
+$$\text{Posterior}= p(\kappa \mid y, \mu) \propto p(y \mid \mu, \kappa) \cdot p(\kappa) = \frac{ \exp (\kappa \cdot \sum^n\cos (y-\mu))  \cdot exp{(- \lambda \kappa)}}{(I_0(\kappa))^n}$$
+Following rules for multiplying exponentials
+
+$$p(\kappa \mid y, \mu) \propto p(y \mid \mu, \kappa) \cdot p(\kappa) = \frac{ \exp (\kappa \cdot \sum^n\cos (y-\mu) - \lambda \kappa)}{(I_0(\kappa))^n}$$
+Below we calculate the Posterior $\propto f(\kappa)$.
+```{r}
+y <- c(-2.79, 2.33, 1.83, -2.44, 2.23, 2.33, 2.07, 2.02, 2.14, 2.54)
+lambda <- 0.5
+n <- 10
+mu <- 2.4
+
+
+posterior <- function(k){
+   
+  exp(k * (sum(cos(y-mu)))-k*lambda)/ (besselI(k, 0)^n)
+  
+}
+```
+
+\pagebreak
+* Plotting the posterior distribution over a fine grid
+
+```{r}
+# applying a grid of k values for the posterior function
+posterior_3 <- sapply(seq(0.01,10,by=0.01),posterior)
+
+# integrate posterior function to use in normalization
+posterior_integrate <- integrate(posterior, lower = 0.01, upper = 10)$value
+
+#norm <- posterior_3/(sum(posterior_3)*0.01)
+norm <- posterior_3/posterior_integrate
+
+plot(seq(0.01,10,length.out=1000),norm, type='l')
+```
+
+The posterior is right skewed and has a high density between around 2-4.
+
+## b 
+
+Find the (approximate) posterior mode of k from the information in a).
+
+
+* The fastest way to do this is by finding index for where the posterior density vector is maximized
+```{r}
+which.max(norm);norm[which.max(norm)]
+```
+
+At element 259 the posterior density has value 0.003886893, which we use to find the maximum (i.e. mode) value of the [0,10] sequence.
+
+```{r}
+seq(0,10,length.out=1000)[which.max(norm)]
+```
+
+The approximate posterior mode of $\kappa$ is 2.582583. If the sequenced numbers would increase the approximate value would be closer to true convergence.
+
+
+```{r}
+plot(seq(0.01,10,length.out=1000),norm, type='l')
+abline(v=(seq(0,10,length.out=1000)[which.max(norm)]), col = "red")
+```
+
+This graph confirms that the value found of 2.162162 is the approximate posterior mode of $\kappa$.
+
+```{r}
+# loading the data
+lin <- read_excel("Linkoping2022.xlsx")
+
+women <- read.table('WomenAtWork.dat', header=TRUE)
+
+```
+
+
+
+# Lab 2: Linear and polynomial regression
+
+The dataset Linkoping2022.xlsx contains daily average temperatures (in degree Celcius) in Linköping over the course of the year 2022. Use the function read_xlsx(),
+which is included in the R package readxl (install.packages("readxl")), to import the dataset in R. The response variable is temp and the covariate time that you need
+to create yourself is defned by
+
+$$time = \frac{\text{the number of days since the beginning of the year}}{\text{365}}$$
+
+A Bayesian analysis of the following quadratic regression model is to be performed:
+
+$$temp = \beta_0 + \beta_1 \cdot time + \beta_2 \cdot time^2 + \epsilon , \space\space \epsilon \overset{iid}{\sim}  N(0,\sigma ^2)$$
+```{r}
+# creating the time variable, number of days since the beginning of the year divided by 365
+lin$time <- as.numeric((as.Date(lin$datetime) - as.Date("2022-01-01"))/365)
+```
+
+## a
+
+Use the conjugate prior for the linear regression model. The prior hyperparameters $\mu_0$, $\Omega _0$, $v_0$ and $\sigma^2_0$ shall be set to sensible values. Start with
+$\mu_0= (0, 100, −100)^T, \Omega_0 = 0.01 \cdot I_3, v_0 = 1$ and $\sigma_0^2 =1$. Check if this prior agrees with your prior opinions by simulating draws from the joint prior
+of all parameters and for every draw compute the regression curve. This gives a collection of regression curves; one for each draw from the prior. Does the collection of curves look reasonable? If not, change the prior hyperparameters until the collection of prior regression curves agrees with your prior beliefs
+about the regression curve. [Hint: R package mvtnorm can be used and your $Inv-\chi^2$ simulator of random draws from Lab 1.]
+
+Using a conjugate prior, the joint priors for $\beta$ and $\sigma^2$ is
+
+$$\beta^2 | \sigma^2 \sim N(\mu_0, \sigma^2 \Omega_0^{-1})$$
+
+$$\sigma^2 \sim Inv- \chi^2(v_0, \sigma^2_0)$$
+
+```{r}
+set.seed(123456789)
+# creating the variables
+mu0 <- t(c(0, 100, -100))
+omega0 <- diag(0.01, nrow=3,ncol=3)
+v0 <- 1
+sigma0 <- 1
+n <- nrow(lin)
+
+beta <- matrix(ncol=3, nrow=1000)
+sigma <- matrix(ncol=1, nrow=1000)
+for (i in 1:1000){
+  # joint prior for sigma, this is the inv-chi2 simulator from lab 1
+  sigma[i] <- (v0*sigma0)/rchisq(1,v0) 
+  
+  # joint prior for beta
+  beta[i,] <- rmvnorm(1,mean=mu0,sigma[i]*solve(omega0)) 
+}
+
+```
+
+```{r}
+# regression curves 
+
+reg_matrix <- matrix(ncol=nrow(lin), nrow=1000)
+
+for (i in 1:1000){
+  
+  # temp = b0 + b1*time + b2*time^2 + e, e ~ N(0, sigma^2)
+  reg_matrix[i,] <- beta[i,1] + beta[i,2] *lin$time + beta[i,3]*lin$time^2 + rnorm(1,0,sigma[i])
+  
+}
+
+
+plot(n, xlim=c(0,1),ylim=c(-40,60), xlab = "Time", ylab = "Temp")
+for (i in 1:1000){
+  lines(x=lin$time,y=reg_matrix[i,], col = "black")
+}
+lines(lin$temp, x=lin$time, type='l', col = "red", lwd = 1.5)
+```
+
+The initial values gives shows a plot that is badly defined and the only inference really is that values of $[-40, 60]$ degrees are very frequent. We can therefore conclude the collection of curves does not look reasonable. The red curve shows the temperature measured and the black lines are the estimated curves. From this, we decided to change the values; $v_0= 150, \sigma_0^2= 1, \Omega_0 =1 \cdot I_3, \mu_0 = (-10, 120, -120)^T$.
+
+
+```{r}
+set.seed(123456789)
+# creating the variables
+mu0 <- t(c(-10,120,-120))
+omega0 <- diag(1, nrow=3,ncol=3)
+v0 <- 150
+sigma0 <- 1
+```
+
+
+```{r, echo = FALSE}
+n <- nrow(lin)
+
+beta <- matrix(ncol=3, nrow=1000)
+sigma <- matrix(ncol=1, nrow=1000)
+for (i in 1:1000){
+  sigma[i] <- (v0*sigma0)/rchisq(1,v0) # joint prior for sigma, this is the inv-chi2 simulator from lab 1
+
+  beta[i,] <- rmvnorm(1,mean=mu0,sigma[i]*solve(omega0)) # joint prior for beta
+}
+
+# regression curves 
+
+reg_matrix <- matrix(ncol=nrow(lin), nrow=1000)
+
+for (i in 1:1000){
+  
+  # temp = b0 + b1*time + b2*time^2 + e, e ~ N(0, sigma^2)
+  reg_matrix[i,] <- beta[i,1] + beta[i,2] *lin$time + beta[i,3]*lin$time^2 + rnorm(1,0,sigma[i])
+  
+}
+
+
+plot(n, xlim=c(0,1),ylim=c(-10,30), xlab = "Time", ylab = "Temp")
+for (i in 1:1000){
+  lines(x=lin$time,y=reg_matrix[i,], col = "black")
+}
+lines(lin$temp, x=lin$time, type='l', col = "red", lwd = 1.5)
+```
+
+The results we got from changing the values are more reasonable. The curve now follows a distinct pattern and seems to capture the seasonal change in temperature in Linköping over the year. The intercept is at -10 where the true temperature is slightly higher and towards springtime the temperature is lower than the estimates for a short while, other than that its a good estimate of the true temperatures. It captures the higher temperatures during summer months and lower during winter months well.
+
+
+## b
+
+Write a function that simulate draws from the joint posterior distribution of $\beta_0, \beta_1 , \beta_2, \sigma^2$.
+
+  i. Plot a histogram for each marginal posterior of the parameters.
+  
+  ii. Make a scatter plot of the temperature data and overlay a curve for the
+  posterior median of the regression function $f(time) = E [temp|time] = \beta_0 + \beta_1 · time + \beta_2 · time²$ , i.e. the median of      f(time) is computed for every value of time . In addition, overlay curves for the 90% equal tail posterior probability intervals of f(time)   ,i.e. the 5 and 95 posterior percentiles of f(time) is computed for every value of time . Does the posterior probability intervals contain   most of the data points? Should they?
+  
+Posteriors for the conjugate prior are
+
+$$\beta | \sigma^2,y \sim N[\mu_n, \sigma^2\Omega_n^{-1}]$$
+
+$$\sigma ^2 | y \sim Inv - \chi^2 (v_n,\sigma_n^2)$$
+
+$$\mu_n = (X^tX+\Omega_0)^{-1}(X^tX\hat\beta + \Omega_o\mu_0)$$
+
+$$\Omega_n = X^tX+\Omega_0$$
+
+$$v_n = v_0 + n$$
+
+$$v_n\sigma_n^2 = v_0\sigma^2_0 + (y^ty + \mu_o^t\Omega_0\mu_0 - \mu_n^t \Omega_n \mu_n)$$
+
+Deviding by *vn* to get $\sigma^2$ on one side :
+
+$$\sigma_n^2 = \frac{v_0\sigma^2_0 + (y^ty + \mu_o^t\Omega_0\mu_0 - \mu_n^t \Omega_n \mu_n)}{v_n}$$
+  
+```{r}
+# creating empty matrices for posteriors
+betaPost <- matrix(ncol = 3, nrow = 1000)
+sigmaPost <- matrix(ncol = 1, nrow = 1000)
+
+mu_n <- matrix(ncol = 1, nrow = 1000)
+y <- matrix(lin$temp)
+X <- matrix(c(rep(1,nrow(lin)),lin$time,lin$time^2),ncol=3)
+beta_hat <- solve(t(X) %*% X) %*% t(X)%*% lin$temp
+
+# X matrix
+X_mat <- matrix(c(rep(1, 365), lin$time, lin$time^2), ncol = 3)
+
+# X'X
+xTx <- t(X_mat) %*% X_mat
+
+# y matrix
+y_mat <- matrix(lin$temp)
+
+# y'y
+yTy <- t(y_mat) %*% y_mat
+
+
+omega_n <- xTx + omega0 # beta posterior variance
+v_n <- v0 + n # sigma posterior mean
+
+for (i in 1:1000){
+  
+  # beta posterior mean
+  mu_n <- solve(xTx + omega0) %*% (xTx %*% beta_hat + omega0 %*% t(mu0)) 
+  
+  # df, sigma posterior
+  vSigma <- (v0 * sigma0 + (yTy + mu0 %*% omega0 %*% t(mu0)) - (t(mu_n) %*% omega_n %*% mu_n))/v_n 
+  
+  # joint sigma posterior distribution
+  sigmaPost[i] <- (vSigma) / rchisq(1, v_n) 
+  
+  # joint beta posterior distribution
+  betaPost[i,] <- rmvnorm(1, mu_n, sigma = sigmaPost[i]*solve(omega_n)) 
+}
+
+```
+
+### i. Plot a histogram of each marginal posterior of the parameters
+
+```{r}
+{hist(betaPost[,1], main = "beta0 posterior"); hist(betaPost[,2], main = "beta1 posterior")}
+{hist(betaPost[,3], main = "beta2 posterior"); hist(sigmaPost, main = "sigma posterior")}
+```
+
+The individual posterior parameters and sigma follow a normal distribution and are close to the prior values as our prior is strong.
+
+### ii. Scatter plot of temperatures and overlay a curve for posterior median
+
+```{r}
+# calculate posterior
+regressionPost <- matrix(ncol=nrow(lin), nrow=1000)
+
+for (i in 1:1000){
+  # calculate posterior according to the regression formula
+  regressionPost[i,] <- betaPost[i,1] + betaPost[i,2] *lin$time + betaPost[i,3]*lin$time^2
+  
+}
+
+# posterior median
+medianPost <- c()
+
+for(i in 1:365){
+  
+  # calculate median for every day
+  medianPost[i] <- median(regressionPost[,i])
+  
+}
+
+# 90% equal tail interval
+eqtiPost <- matrix(nrow = 365, ncol = 2)
+
+for(i in 1:365){
+  
+  eqtiPost[i,1] <- quantile(regressionPost[,i], c(0.05, 0.95))[1]
+  eqtiPost[i,2] <- quantile(regressionPost[,i], c(0.05, 0.95))[2]
+}
+```
+
+
+```{r}
+plot(lin$temp, x=lin$time, xlim=c(0,1),ylim=c(-20,30), col = "black", pch = 1) # scatter plot of temperature data
+lines(x=lin$time,y=medianPost, col = "red", lwd = 2) # curve for posterior median of regression function
+lines(x = lin$time, y = eqtiPost[,1], col = "green", lwd = 2, lty = "dashed") # curve for the lower quantile
+lines(x = lin$time, y = eqtiPost[,2], col = "royalblue", lwd = 2, lty = "dashed") # curve for the upper quantile
+```
+
+The posterior probability intervals do contain a good amount of data for a large part of time.
+
+*You are plotting the 90% intervals around the median function, so that is
+not supposed to cover the actual data points, but the uncertainty about the median value.*
+
+
+
+## c
+
+It is of interest to locate the time with the highest expected temperature (i.e.
+the time where f(time) is maximal). Let's call this value $\bar{x}$. Use the simulated
+draws in (b) to simulate from the posterior distribution of $\bar{x}$. [Hint: the
+regression curve is a quadratic polynomial. Given each posterior draw of $\beta_0, \beta_1, \beta_2$, you can find a simple formula for $\bar{x}$.
+
+
+A simple formula for calculating the expected maximum of a quadratic function is by calculating it's derivative and finding the day for where it's closest to 0.
+
+Our polynomial regression has formula 
+
+$$f(time) = \beta_0 + \beta_{1,i} \cdot time + \beta_{2,i}\cdot time^2$$
+With derivative of 
+
+$$f'(time) = \beta_{1,i} + 2 \cdot \beta_{2 ,i}\cdot time$$
+
+```{r}
+derivPost <- matrix(ncol = 1, nrow = 1000)
+
+
+for(i in 1:1000){
+  # for each days derivative, take min of abs value to find nearest to zero
+  derivPost[i,] <- lin$time[which.min(abs(betaPost[i,2] + 2*betaPost[i,3]*lin$time))] 
+}
+
+# posterior distribution of highest expected temperature
+hist(derivPost, main = "Time with highest expected temperature", xlab = "Time")
+```
+
+The temperature is the higest at almost precisely 0.5, i.e. half of the year gone by. This makes sense as it would place us in the midst of the summer months. To confirm this, we can plot the curve and index the element of the derivation closest to zero.
+
+```{r}
+plot(lin$temp, x=lin$time, xlim=c(0,1),ylim=c(-20,30), col = "black"); lines(x=lin$time,y=medianPost, col = "red", lwd = 2)
+
+# the time (i.e element) that has derivative closest to zero
+derivMax <- max(table(derivPost)) 
+
+abline(v = lin$time[derivMax], col = "darkgreen") # derivative closest to zero according to each day
+```
+
+The vertical line shows where on the curve the highest expected temperature should fall according to the derivative. This happens at the maximum of the curve which is expected.
+
+## d
+
+Say now that you want to estimate a polynomial regression of order 10 ,
+but you suspect that higher order terms may not be needed, and you worry
+about overftting the data. Suggest a suitable prior that mitigates this potential
+problem. You do not need to compute the posterior. Just write down your
+prior. [Hint: the task is to specify $\mu_0$ and $\Omega_0$ in a suitable way.]
+
+An order 10 polynomial regression has formula
+
+$$y = X_P \beta + \epsilon, \ X_P = (1, x, x^2, ..., x^{10})$$
+
+
+```{r}
+
+set.seed(123456789)
+# creating the variables
+# set zero as mu_0 values for mean of priors of beta of a higher order to get parameters close to 0
+mu0 <- t(c(-5,120,-120,0,0,0,0,0,0,0,0)) 
+
+# picking high values of omega to get lower variance of the prior
+# more certain that these parameters are 0 to reduce overfittning
+omega0 <- diag(c(1,1,1,rep(1000,8)), nrow=11,ncol=11) 
+v0 <- 150
+sigma0 <- 1
+n <- nrow(lin)
+
+beta <- matrix(ncol=11, nrow=1000)
+sigma <- matrix(ncol=1, nrow=1000)
+
+reg_matrix <- matrix(ncol=nrow(lin), nrow=1000)
+
+
+for (i in 1:1000){
+  
+  sigma[i] <- (v0*sigma0)/rchisq(1,v0) # joint prior for sigma
+
+  beta[i,] <- rmvnorm(1,mean=mu0,sigma[i]*solve(omega0)) # joint prior for beta
+
+  
+  reg_matrix[i,] <- beta[i,1] + beta[i,2] *lin$time + beta[i,3]*lin$time^2 + beta[i,4]*lin$time^3 +
+     beta[i,5]*lin$time^4 + beta[i,6]*lin$time^5 + beta[i,7]*lin$time^6 + beta[i,8]*lin$time^7 +
+    beta[i,9]*lin$time^8 + beta[i,10]*lin$time^9 + beta[i,11]*lin$time^10 +rnorm(1,0,sigma[i])
+  
+}
+
+plot(n, xlim=c(0,1),ylim=c(-10,40), xlab = "Time", ylab = "Temp")
+for (i in 1:1000){
+  lines(x=lin$time,y=reg_matrix[i,])
+}
+lines(lin$temp, x=lin$time, type='l', col="red")
+```
+
+
+Priors for polynomial regression of order 10:
+
+Low values for $mu_0$ as we want beta parameters for the higher orders to be close to 0 so we don't overfit.
+
+$$\mu_0 = (-5,120,-120,0,0,0,0,0,0,0,0) $$
+
+Since the inverse of $\Omega_0$ is used in calculation, the values should be high for the columns of the higher order to choose a prior that has high probability for these $\mu$-values.
+
+
+$$\Omega_0 = (1,1,1,1000,1000,1000,1000,1000,1000,1000,1000)$$
+
+
+\pagebreak
+
+# Lab 2: Posterior approximation for classification with logistic regression 
+
+The dataset WomenAtWork.dat contains n = 132 observations on the following eight
+variables related to women:
+
+```{r, echo = FALSE}
+
+knitr::kable(
+  data.frame(
+    Variable = c("Work", "Constant", "HusbandInc", "EducYears", "ExpYears", "Age", "NSmallChild", "NBigChild"),
+    `Data type` = c("Binary", "1", "Numeric", "Counts", "Counts", "Counts", "Counts", "Counts"),
+    Meaning = c("Whether or not the woman works", "Constant to the intercept", "Husband's income", "Years of education", "Years of experience", "Age", "Number of children $\\leq$ 6 years in household", "Number of children > 6 years in household"),
+    Role = c("Response y", "Feature", "Feature", "Feature", "Feature", "Feature", "Feature", "Feature")
+  ),
+  align = c("l", "c", "l", "l"),
+  caption = "Variable Information"
+)
+```
+
+
+
+## a
+
+Consider the logistic regression model:
+
+$$Pr(y=1|x,\beta) = \frac{exp(x \beta)}{1 + exp(x\beta)}$$,
+
+where y equals 1 if the woman works and 0 if she does not. x is a 7 -dimensional
+vector containing the seven features (including a 1 to model the intercept).
+The goal is to approximate the posterior distribution of the parameter vector
+$\beta$ with a multivariate normal distribution
+
+$$\beta |y,x \sim N(\tilde{\beta}, J{-1}_y (\tilde\beta))$$
+
+where $\tilde\beta$ is the posterior mode and $J(\tilde\beta) = - \frac{\partial² ln p(\beta|y)}{\partial\beta\partial\beta ^T} |_{\beta=\tilde\beta }$ is the negative of the observed Hessian evaluated at the posterior mode. Note that $\frac{\partial² ln p(\beta|y)}{\partial\beta\partial\beta ^T}$ is a 7 × 7 matrix with second derivatives on the diagonal and cross-derivatives $\frac{\partial² ln p(\beta|y)}{\partial\beta_i\partial\beta_j }$ on the off-diagonal. You can compute this derivative by hand, but we will let the computer do it numerically for you. Calculate both $\tilde\beta$ and $J(\tilde\beta)$ by using the optim function in R. [Hint: You may use code snippets from my demo of logistic regression in Lecture 6.] Use the prior $\beta \sim N(0,\tau²I)$ , where
+$\tau=2$.
+
+Present the numerical values of $\tilde\beta$ and $J_y{-1}(\tilde\beta)$ for the WomenAtWork data. Compute an approximate 95% equal tail posterior probability interval for the regression coeffcient to the variable NSmallChild. Would you say that this feature
+is of importance for the probability that a woman works? [Hint: You can verify that your estimation results are reasonable by comparing
+the posterior means to the maximum likelihood estimates, given by: glmModel<- glm(Work ~ 0 + ., data = WomenAtWork, family = binomial).]
+
+
+
+```{r}
+# picking out the variables from the data
+y <- women$Work
+X <- women[,-1]
+
+# for comparison
+glmModel<- glm(Work ~ 0 + ., data = women, family = binomial) 
+
+logisticpost <- function(betas,y,X,tau){
+  
+  B_prior <- dmvnorm(betas,rep(0,7),diag(tau ^ 2,7), log=TRUE)
+  
+  linpred <- as.matrix(X)%*%betas
+  loglik <- sum( linpred*y - log(1 + exp(linpred)) )
+  if (abs(loglik) == Inf) loglik = -20000;
+  
+  B_prior+loglik
+}
+
+tau <- 2
+
+
+betas <- rep(0,7)
+
+
+
+OptimRes <- optim(betas,logisticpost,gr=NULL,y,X,tau,method=c("BFGS"),
+                  control=list(fnscale=-1),hessian=TRUE)
+
+
+
+# Printing the results to the screen
+names(OptimRes$par) <- names(X) # Naming the coefficient by covariates
+approxPostStd <- sqrt(diag(solve(-OptimRes$hessian))) # Computing approximate standard deviations.
+names(approxPostStd) <-  names(X) # Naming the coefficient by covariates
+print('The posterior mode is:')
+print(OptimRes$par)
+
+print('GLM coefficients')
+print(glmModel$coefficients)
+
+print('The approximate posterior standard deviation is:')
+print(approxPostStd)
+
+```
+
+```{r}
+c(OptimRes$par[6] - 1.96 * approxPostStd[6],
+  OptimRes$par[6] + 1.96 * approxPostStd[6])
+```
+The feature does indeed have a big importance for the probability that a woman works. It has the largest coefficient of all covariates and the interval is always minus (i.e. does not cover 0) thus meaning it always has a negative effect for the probability that a woman works.
+And this seems reasonable as if you have small children then you might need to be at home for a couple of years unless you split the time of being at home between both parents.
+
+## b
+
+Use your normal approximation to the posterior from (a). Write a function
+that simulate draws from the posterior predictive distribution of $Pr(y = 0|x)$,
+where the values of x corresponds to a 40-year-old woman, with two children
+(4 and 7 years old), 11 years of education, 7 years of experience, and a husband
+with an income of 18. Plot the posterior predictive distribution of $Pr(y = 0|x)$
+for this woman.
+[Hints: The R package mvtnorm will be useful. Remember that $Pr(y = 0|x)$
+can be calculated for each posterior draw of $\beta$.]
+
+
+```{r}
+# values for the woman to predict if she works or not
+x_woman <- matrix(c(1,18,11,7,40,1,1),1,7)
+woman_pred <- c()
+
+for (i in 1:1000){
+  # simulating 1000 different betas from multivariate normal dist 
+  # with beta_tilde and inverese of the hessian
+  betass <- rmvnorm(1,OptimRes$par,solve(-OptimRes$hessian))
+  
+  # the logistic regression function conjugate to get prob of not working
+  woman_pred[i] <- 1- (exp(x_woman%*%t(betass))/((1+exp(x_woman%*%t(betass)))))
+  
+}
+
+
+```
+
+
+```{r}
+hist(woman_pred)
+```
+
+A women with the characteristics described has a high probability with mode around 80% to not be working. She has a small child and a big child but still young one, which could mean she is not working and instead takes care of them.
+
+
+## c
+
+Now, consider 13 women which all have the same features as the woman in
+(b). Rewrite your function and plot the posterior predictive distribution for
+the number of women, out of these 13, that are not working. [Hint: Simulate
+from the binomial distribution, which is the distribution for a sum of Bernoulli
+random variables.]
+
+
+
+
+```{r}
+
+Woman_13 <-c() 
+for (i in 1:1000){
+ # drawing 1 value per prob of 13 women 
+  
+ Woman_13[i] <- rbinom(1,13,woman_pred[i])
+  
+}
+
+hist(Woman_13)
+
+
+```
+
+
+The highest density of women not working with these attributes are at 10 of 13 women. 
+
+\pagebreak
+
+# Lab 3: Gibbs sampling for the logistic regression
+
+Consider again the logistic regression model in problem 2 from the previous computer lab 2. Use the prior $\beta \sim N (0,\tau^2)$ where $\tau = 3$
+
+
+## a 
+
+Implement (code!) a Gibbs sampler that simulates from the joint posterior $p(w,\beta|x)$ by augmenting the data with Polya-gamma latent variables $w_i, i = 1 \ldots n$. The full conditional posteriors are given on the slides from Lecture 7. Evaluate the convergence of the gibbs sampler by calculating the Inefficienty Factors(IFs) and by plotting the trajectories of the samples Markov chains.
+
+DATA augumentation logistic regression:
+
+$$Pr(y_i=1|v_i,\beta) = \frac{exp(c_i^T\beta)}{1 + exp(x_i^T\beta)}$$
+
+The posterior is unknown, augment with polya-gamma
+
+$$w_i = \frac{1}{2\pi^2} \sum_{k=1}^\infty\frac{g_k}{(k-\frac{1}{2})+ \frac{(x_i^T\beta)^2}{4\pi^2}}$$
+
+where g_k are independent draws from exp distribution with mean 1.
+
+simulate tje joint posterior p(w,B|y)
+
+$$w_i|\beta \sim PG(1,x_i^t\beta), i=1,\ldots,n$$
+
+$$\beta|y,w \sim N(m_w,V_w)$$
+
+where:
+$$V_w = (X^T\Omega X + B^{-1})^{-1}$$
+
+$$m_w = V_w(X^T \kappa + B^{-1} b$$
+
+kappa is a vector of (y_1-(1/2)....y_n-(1/2))
+
+$\Omega$ is the diagonal matrix of w_i
+
+
+
+
+
+```{r}
+women <- read.table('WomenAtWork.dat', header=TRUE)
+
+# picking out the variables from the data
+y <- women$Work
+X <- as.matrix(women[,-1])
+set.seed(123456789)
+# creating variables that are used in the sampling
+tau <- 3
+betas <- rep(1,7)
+n_samp <- 3000
+kappa <- as.matrix(y-0.5,ncol=1)
+beta_samples <- matrix(NA, nrow = n_samp, ncol = 7)
+beta_samples[1,] <- betas
+
+wi <- matrix(0,nrow = nrow(X),ncol=n_samp)
+i=2
+j=1
+for (i in 2:n_samp){
+  
+  for (j in 1:nrow(X)){
+
+    wi[j,i-1] <- rpg(1,h=1,X[j,]%*%beta_samples[i-1,]) # polya gamma draws for data
+  }
+  omega <- diag(wi[,i-1]) 
+  #B_prior <- dmvnorm(betas,rep(1,7),diag(tau ^ 2,7), log=TRUE)
+  
+  Vw <- solve(t(X)%*%omega%*%X + solve(diag(tau ^ 2,7))) # equation for Vm
+  mw <- Vw %*%(t(X)%*%kappa) # equatino for mw
+  beta_samples[i,] <- rmvnorm(1,mw,Vw)
+  #loglik <- sum( linpred*y - log(1 + exp(linpred)))
+
+  #B_prior+loglik
+  
+}
+
+
+
+
+```
+
+
+Inefficiency factor of MCMC
+
+$$IF = 1 + 2 \cdot \sum_{k=1} ^\infty\rho_k  $$
+
+where 
+
+$$\rho_k = Corr(\theta ^i,\theta^{(i+k)}) $$
+
+
+
+
+```{r}
+
+sum_cor <- matrix(0,ncol=7)
+# sum of the autocorrelations for the samples, minus the first row
+for (i in 1:ncol(beta_samples)){
+sum_cor[,i] <- sum(acf(beta_samples[-1,i],plot=FALSE)$acf)
+}
+
+IF <- 1 + 2*sum_cor # calculating the IF
+
+IF <- data.frame(IF)
+colnames(IF) <- c('b0','b1','b2','b3','b4','b5','b6')
+# print
+knitr::kable(IF)
+
+```
+
+There is autocorrelation within the draws as we're not getting a value close to 1, we need to take around 6 times more draws then a independent draw to get the same information for beta_3, which have the highest factor of all parameters. 
+
+```{r}
+library(ggplot2)
+# Combine the beta_samples data into a data frame suitable for ggplot
+df <- data.frame(iteration = rep(seq_len(nrow(beta_samples)), ncol(beta_samples)),
+                 value = c(beta_samples),
+                 parameter = rep(names(women)[-1], each= nrow(beta_samples)))
+
+ # creating several line plots
+plots <- ggplot(df, aes(x = iteration, y = value)) +
+  geom_line() +
+  facet_wrap(~ parameter, scales = "free_y") +
+  labs(x = "Iteration",y='') +
+  theme_bw()
+
+# Print the plots
+print(plots)
+```
+
+Looks like the parameters converge rather quickly.
+
+
+## b
+
+Use the posterior draws from a) to compute 90% equal tail credible interval for $Pr(y=1|x)$ where x corresponds to a 38-year-old woman with 1 chils(3 years old), 12 years of education and 7 years of experience and a husband with an income of 22. A 90% equal tail credible interval (a,b) cuts the off 5% percent of the posterior probability mass to the left of a, and 5% to the right of b. 
+
+```{r}
+x_woman <- c(1,22,12,7,38,1,0) # creating the woman
+
+woman_pred <- c() # vector for predictions
+
+
+  
+# the logistic regression function conjugate to get prob of not working
+woman_pred <- (exp(x_woman%*%t(beta_samples[-1,]))/((1+exp(x_woman%*%t(beta_samples[-1,])))))
+  
+
+
+hist(woman_pred)
+```
+
+```{r}
+colMeans(beta_samples)
+```
+
+
+The highest density is around 25% that the woman would be working, which most likely is because she has a small child as that parameter has the largest absolute posterior mean value. 
+
+
+```{r}
+df_q <- data.frame(quantile(woman_pred, c(0.05, 0.95)))
+
+colnames(df_q) <-' ' 
+
+knitr::kable(df_q,digits=3, caption="10% Equal tail interval")
+```
+
+5 percent of the posterior probability mass is below 11.6% and above 39.7%.
+
+
+
+# Lab 3:  Metropolis Random Walk for Poisson regression
+
+Consider the following Poisson regression model
+
+$$y_i |\beta \overset{iid}\sim Poisson [exp(x_i^T \beta)]$$
+
+where yi is the count for the ith observation in the sample and xi is the p-dimensional
+vector with covariate observations for the ith observation. Use the data set eBayNumberOfBidderData_2024.dat. This dataset contains observations from 800 eBay auctions of coins. The response variable is nBids and records the number of
+bids in each auction. The remaining variables are features/covariates (x):
+
+
+* Const (for the intercept)
+
+* PowerSeller (equal to 1 if the seller is selling large volumes on eBay)
+
+* VerifyID (equal to 1 if the seller is a verifed seller by eBay)
+
+* Sealed (equal to 1 if the coin was sold in an unopened envelope)
+
+* MinBlem (equal to 1 if the coin has a minor defect)
+
+* MajBlem (equal to 1 if the coin has a major defect)
+
+* LargNeg (equal to 1 if the seller received a lot of negative feedback from
+customers)
+
+* LogBook (logarithm of the book value of the auctioned coin according to
+expert sellers. Standardized)
+
+* MinBidShare (ratio of the minimum selling price (starting price) to the book
+value. Standardized).
+
+
+## a)
+
+Obtain the maximum likelihood estimator of $\beta$ in the Poisson regression model
+for the eBay data [Hint: glm.R, don't forget that glm() adds its own intercept
+so don't input the covariate Const]. Which covariates are signifcant?
+
+```{r}
+coins <- read.table('eBayNumberOfBidderData_2024.dat', header=TRUE)
+
+
+mle <- glm(nBids ~ .-Const, data = coins, family = poisson)
+summary(mle)
+```
+VerfyID, Sealed, LogBook and MinBidShare and MajBlem are significant on a 99% significance level. 
+
+
+
+## b)
+
+Let's do a Bayesian analysis of the Poisson regression. Let the prior be $\beta \sim N[0,100\cdot(X^TX)^{-1}]$ , where X is the n x p covariate matrix. This is a commonly used prior, which is called Zellner's g-prior. Assume first that the posterior density is approximately multivariate normal:
+
+$$\beta|y \sim N(\hat\beta, J_y^{-1}(\hat\beta))$$
+
+where $\hat\beta$ is the posterior mode and $J_y(\hat\beta)$ is the negative hessian at the posterior mode.$\hat\beta$ and $J_y(\hat\beta)$ can be obtained by numerical optimization(optim.R) exactly like youve already did for the first logistic regression in Lab 2 (but with the log posterior function replaced by the corresponding one for the Poisson model, which you have code up.).
+
+```{r}
+library(mvtnorm)
+
+y <- as.matrix(coins[,1])
+X <- as.matrix(coins[,-1])
+
+n <- nrow(X)
+p <- ncol(X)
+Xnames <- colnames(X)
+
+# prior
+mu <- as.matrix(rep(0,p))
+Sigma <- as.matrix(100*(solve(t(X) %*% X)))
+
+poissonPost <- function(betas,y,X,mu,Sigma){
+  
+  linPred <- X%*%betas;
+  logLik <- sum(linPred*y - exp(linPred)) # poisson likelihood
+  logPrior <- dmvnorm(betas, mu, Sigma, log=TRUE);
+  
+  if (abs(logLik) == Inf) logLik = -20000; 
+ 
+  return(logLik + logPrior)
+}
+
+# Select the initial values for beta
+initVal <- matrix(0,p,1)
+
+# The argument control is a list of options to the optimizer optim, where fnscale=-1 means 
+# that we minimize the negative log posterior. Hence, we maximize the log posterior.  
+OptimRes <- optim(initVal,poissonPost,gr=NULL,y,X,mu,Sigma,method=c("BFGS"),
+                  control=list(fnscale=-1),hessian=TRUE)
+
+# Printing the results to the screen
+names(OptimRes$par) <- Xnames # Naming the coefficient by covariates
+approxPostStd <- sqrt(diag(solve(-OptimRes$hessian))) # Computing approximate standard deviations.
+names(approxPostStd) <- Xnames # Naming the coefficient by covariates
+```
+
+The posterior mode is:
+```{r}
+print(OptimRes$par[1:9])
+```
+
+The approximate posterior standard deviation is:
+```{r}
+print(approxPostStd)
+```
+MLE coefficients:
+```{r}
+coef(mle)
+```
+Compared to the MLE coefficients, the resulting approximate posterior mode coefficients are very similar. 
+
+
+
+## c) 
+
+Let's simulate from the actual posterior of $\beta$ using the Metropolis algorithm
+and compare the results with the approximate results in b). Program a general
+function that uses the Metropolis algorithm to generate random draws from an
+arbitrary posterior density. In order to show that it is a general function for
+any model, we denote the vector of model parameters by $\theta$. Let the proposal
+density be the multivariate normal density mentioned in Lecture 8 (random
+walk Metropolis):
+
+$$\theta_p|\theta^{(i-1)} \sim N(\theta^{(i-1)}, c \cdot \Sigma)$$
+
+
+$\Sigma = J_y^{-1}(\hat\beta)$ was obtained in b). The value c is a tuning parameter and
+should be an input to your Metropolis function. The user of your Metropolis function should be able to supply her own posterior density function, not
+necessarily for the Poisson regression, and still be able to use your Metropolis
+function. This is not so straightforward, unless you have come across function objects in R. The note HowToCodeRWM.pdf in Lisam describes how you can do this in R.
+
+Now, use your new Metropolis function to sample from the posterior of $\beta$
+in the Poisson regression for the eBay dataset. Assess MCMC convergence by
+graphical methods
+
+* Program general function object that uses the Metropolis algorithm to generate random draws from an arbitrary posterior density
+
+\pagebreak
+```{r}
+# theta is a vector of model parameters for which posterior density is evaluated, must be first argument
+# logPostFunc is function object that computes log posterior density at any value of parameter vector
+# C is tuning parameter
+# Sigma is approximate posterior std deviation, J^(-1)_y(Beta)
+
+RWMSampler <- function(theta, logPostFunc, C, postSigma, its, y, X, mu, priorSigma){
+  
+  n <- its # iterations
+  
+  theta0 <- matrix(theta, nrow = ncol(priorSigma), ncol = 1) # initial matrix of theta
+  
+  theta1 <- matrix(nrow = n, ncol = ncol(priorSigma)) # accepted thetas
+  colnames(theta1) <- colnames(X)
+  
+  # propsal density is multivariate normal (random walk metropolis)
+  theta1[1,] <- rmvnorm(1, mean = theta0, sigma = C * postSigma)
+  
+  for(i in 2:n){
+     
+     # theta_(i-1) is set to the previous value of proposed theta
+     theta0 <- c(as.numeric(theta1[i-1,]))
+     
+     # theta_p | theta_(i-1) is calculated
+     theta_p <- rmvnorm(1, mean = theta0, sigma = C * postSigma)
+     
+     theta_p <- c(theta_p)
+     
+     # ratio of Metropolis posterior acceptance ratio = exp[log p(theta_p | y) - log p(theta^(i-1) | y)]
+     ratio <- exp(logPostFunc(theta_p, y, X, mu, priorSigma) - logPostFunc(theta0, y, X, mu, priorSigma))
+     
+     # acceptance probability
+     alpha <- min(1, ratio)
+     
+     
+     if(alpha > runif(1,0,1)){
+       theta1[i,] <- theta_p
+       
+     } else {
+       theta1[i,] <- theta0
+     }
+  }
+  
+  return(theta1)
+}
+```
+
+* Use Metropolis function to sample from posterior of $\beta$ in the Poisson regression. Assess MCMC convergence graphically.
+```{r}
+library(ggplot2)
+
+# whole hessian instead of only diag for estimating sigma
+covariancePost <- solve(-OptimRes$hessian)
+
+set.seed(1234567890)
+metropolisRW <- RWMSampler(theta = 0, logPostFunc = poissonPost, C = 0.5, 
+                           postSigma = covariancePost,
+                           priorSigma = Sigma, 
+                           its = 5000, y = y, X = X, mu = mu)
+
+# Combine the beta_samples data into a data frame suitable for ggplot
+mp <- data.frame(iteration = rep(seq_len(nrow(metropolisRW)), ncol(metropolisRW)),
+                 value = c(metropolisRW),
+                 parameter = rep(names(coins)[-1], each= nrow(metropolisRW)))
+
+ # creating several line plots
+plots_mp<- ggplot(mp, aes(x = iteration, y = value)) +
+  geom_line() +
+  facet_wrap(~ parameter, scales = "free_y") +
+  labs(x = "Iteration",y='') +
+  theme_bw()
+
+# Print the plots
+print(plots_mp)
+```
+The MCMC draws seems to converge after a short burn in phase for all variables. You can see in the graph how the sampling works, where the line can be flat due to the random uniform draw is low so the value is not updated.
+
+```{r}
+metropolisRW[1000,]
+```
+The coefficient values for the last draw is similar to the previous GLM and approximate posterior modes, albeit slightly different.
+
+## d)
+
+Use the MCMC draws from c) to simulate from the predictive distribution of
+the number of bidders in a new auction with the characteristics below. Plot
+the predictive distribution. What is the probability of no bidders in this new
+auction?
+
+* PowerSeller = 1
+* VerifyID = 0
+* Sealed = 1
+* MinBlem = 0
+* MajBlem = 1
+* LargNeg = 0
+* LogBook = 1.2
+* MinBidShare = 0.8
+
+```{r}
+set.seed(1234567890)
+
+# constant + new bidder values
+newBidder <- as.matrix(c(1,1,0,1,0,1,0,1.2,0.8))
+
+pred <- c()
+for(i in 1:nrow(metropolisRW)){
+  # calculate lambda for poisson regression model
+  # and create vector of predictive values from random walk function
+  lambda <- exp(newBidder %*% metropolisRW[i,])
+  pred[i] <- rpois(1,lambda)
+  
+}
+
+hist(pred, freq = FALSE)
+
+table(pred)[1]/1000
+```
+
+
+The resulting distribution of predicted bidders follows a Poisson distribution which is expected. A total of 57 predictions for no bidders, which equals a probability of 343/1000 = 0.343 = 34.3% of no one bidding. 
+
+# Lab 3: Time series models in Stan
+
+## a) 
+
+Write a function in R that simulates data from the AR(1)-process
+
+$$ x _t = \mu + \phi (x_{t-1}- \mu) + \epsilon_t, \epsilon_t \overset{iid}\sim N(0,\sigma^2)$$
+
+
+for given values of $\mu, \phi \text{ and } \sigma^2$. Start the process at x1 = $\mu$ and then simulate
+values for xt for t = 2,3...T and return the vector x1:T containing all time
+points. Use $\mu$ = 9, $\sigma^2$ = 4 and T = 250 and look at some different realizations
+(simulations) of x1:T for values of $\phi$ between −1 and 1 (this is the interval
+of  $\phi$  where the AR(1)-process is stationary). Include a plot of at least one
+realization in the report. What effect does the value of  $\phi$  have on $x_{1:T}$ 
+
+
+```{r}
+
+mu <- 9
+sigma <- 4
+phi <- seq(-1,1,by=0.1)
+xmat <- matrix(mu,ncol=length(phi), nrow=250)
+
+for (j in 1:length(phi)){# looping over different phi values
+  for (i in 2:250){ # looping over all time stamps
+  xmat[i,j] <- mu + phi[j]*(xmat[(i-1),j] - mu) + rnorm(1,0,sqrt(sigma))   
+}
+}
+
+plot(x=c(1:250), y=xmat[,1],type='l')
+lines(xmat[,21], col='red')
+```
+
+The value of phi makes how xt should depend on the previous value, positive/negative autocorrelation, we can see that -1(black line) creates the time serie that goes from positive to negative every other value which indicates negative autocorrelation and that phi = 1 makes the red line where the values follow each other closly and have a high autocorrelation.
+
+## b)
+
+Use your function from a) to simulate two AR(1)-processes, x1:T with $\phi$ = 0.3
+and y1:T with$\phi$ = 0.97. Now, treat your simulated vectors as synthetic data,
+and treat the values of $\mu$, $\phi$ and $\sigma^2$ as unknown parameters. Implement Stancode that samples from the posterior of the three parameters, using suitable
+non-informative priors of your choice. [Hint: Look at the time-series models
+examples in the Stan user's guide/reference manual, and note the different
+parameterization used here.]
+
+* Report the posterior mean, 95% credible intervals and the number of effective posterior samples for the three inferred parameters for each of thesimulated AR(1)-process. Are you able to estimate the true values?
+
+* For each of the two data sets, evaluate the convergence of the samplers and plot the joint posterior of $\mu$ and $\phi$. Comments?
+
+
+
+```{r}
+set.seed(123456789)
+
+mu <- 9
+sigma <- 4
+phi2 <- c(0.3,0.97)
+xmat <- matrix(mu,ncol=2, nrow=250)
+
+for (j in 1:length(phi2)){# looping over different phi values
+  for (i in 2:250){ # looping over all time stamps
+  xmat[i,j] <- mu + phi2[j]*(xmat[(i-1),j] - mu) + rnorm(1,0,sqrt(sigma)) 
+}
+}
+
+plot(x=c(1:250), y=xmat[,2],type='l', main='The two time series, red is phi =0.3')
+lines(xmat[,1], col='red')
+```
+
+
+```{r}
+# stan model phi = 0.3, code from slides (changed)
+
+y=xmat[,1]
+N=length(y)
+
+
+StanModel = '
+data {
+  int<lower=0> N; // Number of observations
+  real y[N];
+}
+parameters {
+  real mu;
+  real<lower=-1,upper=1> phi; // creating phi with the interval -1,1
+  real<lower=0> sigma2;
+}
+model {
+  mu ~ normal(9,20); // Normal with mean 9, st.dev. 20
+  phi ~ uniform(-1,1); //  uniform in the interal
+  sigma2 ~ scaled_inv_chi_square(1,2); // Scaled-inv-chi2 with nu 1,sigma 2
+  for(i in 2:N){
+    y[i] ~ normal(mu + phi * (y[i-1] - mu),sqrt(sigma2));
+  }
+}'
+```
+
+
+
+
+```{r, message=FALSE}
+data <- list(N=N, y=y)
+warmup <- 1000
+niter <- 2000
+fit <- stan(model_code=StanModel,data=data, warmup=warmup,iter=niter,chains=4)
+# Print the fitted model
+#print(fit,digits_summary=3)
+fitsum <- summary(fit)$summary[c(1,2,3),c(1,4,8,9)]
+# Extract posterior samples
+
+# Do traceplots of the first chain
+#par(mfrow = c(1,1))
+#plot(postDraws$mu[1:(niter-warmup)],type="l",ylab="mu",main="Traceplot")
+# Do automatic traceplots of all chains
+#traceplot(fit)
+# Bivariate posterior plots
+#pairs(fit)
+knitr::kable(fitsum,caption = 'phi = 0.3')
+
+```
+
+The posterior mean for mu, phi and sigma are close to the true values for the time serie, and all parameters have over 3500 efficient draws. 
+
+
+
+```{r}
+# stan model phi = 0.97
+
+y=xmat[,2]
+N=length(y)
+
+
+StanModel = '
+data {
+  int<lower=0> N; // Number of observations
+  real y[N];
+}
+parameters {
+  real mu;
+  real<lower=-1,upper=1> phi; // creating phi with the interval -1,1
+  real<lower=0> sigma2;
+}
+model {
+  mu ~ normal(9,20); // Normal with mean 9, st.dev. 20
+  phi ~ uniform(-1,1); //  uniform in the interal
+  sigma2 ~  scaled_inv_chi_square(1,2); // Scaled-inv-chi2 with nu 1,sigma 2
+  for(i in 2:N){
+    y[i] ~ normal(mu + phi * (y[i-1] - mu),sqrt(sigma2));
+  }
+}'
+```
+
+
+```{r}
+data <- list(N=N, y=y)
+warmup <- 1000
+niter <- 2000
+fit2 <- stan(model_code=StanModel,data=data, warmup=warmup,iter=niter,chains=4)
+# Print the fitted model
+fit2sum <- summary(fit2)$summary[c(1,2,3),c(1,4,8,9)]
+
+knitr::kable(fit2sum,caption = 'phi = 0.97')
+```
+
+The time serie with phi = 0.97 also have posterior means close to the true values but the credible interval for mu is much wider and even cover 0, but the other credible intervals are tighter. The number of efficient draws is also much lower for this value of phi, this has to do with the correlation between phi and mu when phi has a high value. As phi = 0.97 every draw will change more and will also be dependent on the drawn mu, this might explain the high variance for mu.
+
+
+
+```{r}
+# Do traceplots 
+
+traceplot(fit, warmup=TRUE, nrow=3)
+```
+
+```{r}
+# eval convergence
+postDraws2 <- extract(fit2)
+# Do traceplots of the  chain
+
+traceplot(fit2, warmup=TRUE, nrow=3)
+```
+
+Looking at the traceplots for the parameters for the two time series we can see that all parameters seems to converge quickly as they go close and vary around the true value after very few iterations. Whats notable is that mu for the timeserie with phi = 0.97 is that this vary much more than all other parameters and it also seems to have some outliers here and there.
+
+
+
+
+```{r}
+# joint posterior of phi = 0.3
+postDraws <- extract(fit)
+plot(postDraws$mu,y=postDraws$phi, type='p', ylab='phi', xlab='mu')
+```
+
+The values for phi and mu are close to the center which has the highest density and are where the true values also are. There doesn't look like there is any correlation between phi and mu, as there isnt any clear pattern.  
+
+
+```{r}
+# joint posterior of phi = 0.97
+postDraws2 <- extract(fit2)
+plot(postDraws2$mu,y=postDraws2$phi, type='p', ylab='phi', xlab='mu')
+```
+
+For phi = 0.97 we have a upper bound where phi cant go over 1 so we get a border for phi there, but we can see that the values for phi centered around its posterior mean of 0.985. The variance for mu is large and the pattern of we can see with the downward and upward trend is the high autocorrelation, a negative value will be followed by a negative and a positive with a positive etc. 
+
+
+\pagebreak
+# Appendix
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
+

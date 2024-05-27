@@ -1,0 +1,708 @@
+---
+title: "Computer lab 3"
+date: "`r Sys.Date()`"
+author: "Johannes Hedström & Mikael Montén "
+output:
+  pdf_document:
+    latex_engine: xelatex
+    fig_caption: yes
+    number_sections: yes
+  html_document:
+    df_print: paged
+geometry: top=100pt,bottom=100pt,left=68pt,right=66pt
+header-includes:
+- \usepackage{float}
+- \usepackage{longtable}
+- \usepackage{caption}
+- \usepackage{fancyhdr}
+- \usepackage{titling}
+- \renewcommand{\headrulewidth}{0pt}
+- \renewcommand{\and}{\\}
+- \pretitle{\centering\vspace{0cm}{732A73 Bayesian Learning \par}\vspace{5cm}\Huge\textbf}
+- \posttitle{\vspace{1cm}\large\textbf{}\par}
+- \preauthor{\centering\vspace{4cm}\normalsize}
+- \postauthor{\par\vspace{2cm}}
+- \predate{\centering{\normalsize STIMA \\
+  Department of Computer and Information Science \\ Linköpings universitet \par}}
+- \postdate{\par\vspace{0cm}}
+- \raggedbottom
+---
+
+
+<!-- page number pos -->
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+\pagestyle{fancy}
+
+<!-- no page nr on first page  -->
+\pagenumbering{gobble}
+
+<!-- Anger sidbrytning -->
+\clearpage
+
+<!-- creating the table of contents -->
+\setcounter{tocdepth}{3}
+\tableofcontents
+
+<!-- new page -->
+\clearpage
+
+<!-- starting the count on 1 after the contents -->
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE, fig.width = 5, fig.height = 3, fig.align = 'center')
+set.seed(12345)
+```
+
+```{r}
+library(coda)
+library(readxl)
+library(mvtnorm)
+library(tidyr)
+library(BayesLogit)
+library(tinytex)
+library(rstan)
+```
+
+# Gibbs sampling for the logistic regression
+
+Consider again the logistic regression model in problem 2 from the previous computer lab 2. Use the prior $\beta \sim N (0,\tau^2)$ where $\tau = 3$
+
+
+## a 
+
+Implement (code!) a Gibbs sampler that simulates from the joint posterior $p(w,\beta|x)$ by augmenting the data with Polya-gamma latent variables $w_i, i = 1 \ldots n$. The full conditional posteriors are given on the slides from Lecture 7. Evaluate the convergence of the gibbs sampler by calculating the Inefficienty Factors(IFs) and by plotting the trajectories of the samples Markov chains.
+
+DATA augumentation logistic regression:
+
+$$Pr(y_i=1|v_i,\beta) = \frac{exp(c_i^T\beta)}{1 + exp(x_i^T\beta)}$$
+
+The posterior is unknown, augment with polya-gamma
+
+$$w_i = \frac{1}{2\pi^2} \sum_{k=1}^\infty\frac{g_k}{(k-\frac{1}{2})+ \frac{(x_i^T\beta)^2}{4\pi^2}}$$
+
+where g_k are independent draws from exp distribution with mean 1.
+
+simulate tje joint posterior p(w,B|y)
+
+$$w_i|\beta \sim PG(1,x_i^t\beta), i=1,\ldots,n$$
+
+$$\beta|y,w \sim N(m_w,V_w)$$
+
+where:
+$$V_w = (X^T\Omega X + B^{-1})^{-1}$$
+
+$$m_w = V_w(X^T \kappa + B^{-1} b$$
+
+kappa is a vector of (y_1-(1/2)....y_n-(1/2))
+
+$\Omega$ is the diagonal matrix of w_i
+
+
+
+
+
+```{r}
+women <- read.table('WomenAtWork.dat', header=TRUE)
+
+# picking out the variables from the data
+y <- women$Work
+X <- as.matrix(women[,-1])
+set.seed(123456789)
+# creating variables that are used in the sampling
+tau <- 3
+betas <- rep(1,7)
+n_samp <- 3000
+kappa <- as.matrix(y-0.5,ncol=1)
+beta_samples <- matrix(NA, nrow = n_samp, ncol = 7)
+beta_samples[1,] <- betas
+
+wi <- matrix(0,nrow = nrow(X),ncol=n_samp)
+i=2
+j=1
+for (i in 2:n_samp){
+  
+  for (j in 1:nrow(X)){
+
+    wi[j,i-1] <- rpg(1,h=1,X[j,]%*%beta_samples[i-1,]) # polya gamma draws for data
+  }
+  omega <- diag(wi[,i-1]) 
+  #B_prior <- dmvnorm(betas,rep(1,7),diag(tau ^ 2,7), log=TRUE)
+  
+  Vw <- solve(t(X)%*%omega%*%X + solve(diag(tau ^ 2,7))) # equation for Vm
+  mw <- Vw %*%(t(X)%*%kappa) # equatino for mw
+  beta_samples[i,] <- rmvnorm(1,mw,Vw)
+  #loglik <- sum( linpred*y - log(1 + exp(linpred)))
+
+  #B_prior+loglik
+  
+}
+
+
+
+
+```
+
+
+Inefficiency factor of MCMC
+
+$$IF = 1 + 2 \cdot \sum_{k=1} ^\infty\rho_k  $$
+
+where 
+
+$$\rho_k = Corr(\theta ^i,\theta^{(i+k)}) $$
+
+
+
+
+```{r}
+
+sum_cor <- matrix(0,ncol=7)
+# sum of the autocorrelations for the samples, minus the first row
+for (i in 1:ncol(beta_samples)){
+sum_cor[,i] <- sum(acf(beta_samples[-1,i],plot=FALSE)$acf)
+}
+
+IF <- 1 + 2*sum_cor # calculating the IF
+
+IF <- data.frame(IF)
+colnames(IF) <- c('b0','b1','b2','b3','b4','b5','b6')
+# print
+knitr::kable(IF)
+
+```
+
+There is autocorrelation within the draws as we're not getting a value close to 1, we need to take around 6 times more draws then a independent draw to get the same information for beta_3, which have the highest factor of all parameters. 
+
+```{r}
+library(ggplot2)
+# Combine the beta_samples data into a data frame suitable for ggplot
+df <- data.frame(iteration = rep(seq_len(nrow(beta_samples)), ncol(beta_samples)),
+                 value = c(beta_samples),
+                 parameter = rep(names(women)[-1], each= nrow(beta_samples)))
+
+ # creating several line plots
+plots <- ggplot(df, aes(x = iteration, y = value)) +
+  geom_line() +
+  facet_wrap(~ parameter, scales = "free_y") +
+  labs(x = "Iteration",y='') +
+  theme_bw()
+
+# Print the plots
+print(plots)
+```
+
+Looks like the parameters converge rather quickly.
+
+
+## b
+
+Use the posterior draws from a) to compute 90% equal tail credible interval for $Pr(y=1|x)$ where x corresponds to a 38-year-old woman with 1 chils(3 years old), 12 years of education and 7 years of experience and a husband with an income of 22. A 90% equal tail credible interval (a,b) cuts the off 5% percent of the posterior probability mass to the left of a, and 5% to the right of b. 
+
+```{r}
+x_woman <- c(1,22,12,7,38,1,0) # creating the woman
+
+woman_pred <- c() # vector for predictions
+
+
+  
+# the logistic regression function conjugate to get prob of not working
+woman_pred <- (exp(x_woman%*%t(beta_samples[-1,]))/((1+exp(x_woman%*%t(beta_samples[-1,])))))
+  
+
+
+hist(woman_pred)
+```
+
+```{r}
+colMeans(beta_samples)
+```
+
+
+The highest density is around 25% that the woman would be working, which most likely is because she has a small child as that parameter has the largest absolute posterior mean value. 
+
+
+```{r}
+df_q <- data.frame(quantile(woman_pred, c(0.05, 0.95)))
+
+colnames(df_q) <-' ' 
+
+knitr::kable(df_q,digits=3, caption="10% Equal tail interval")
+```
+
+5 percent of the posterior probability mass is below 11.6% and above 39.7%.
+
+
+
+# Metropolis Random Walk for Poisson regression
+
+Consider the following Poisson regression model
+
+$$y_i |\beta \overset{iid}\sim Poisson [exp(x_i^T \beta)]$$
+
+where yi is the count for the ith observation in the sample and xi is the p-dimensional
+vector with covariate observations for the ith observation. Use the data set eBayNumberOfBidderData_2024.dat. This dataset contains observations from 800 eBay auctions of coins. The response variable is nBids and records the number of
+bids in each auction. The remaining variables are features/covariates (x):
+
+
+* Const (for the intercept)
+
+* PowerSeller (equal to 1 if the seller is selling large volumes on eBay)
+
+* VerifyID (equal to 1 if the seller is a verifed seller by eBay)
+
+* Sealed (equal to 1 if the coin was sold in an unopened envelope)
+
+* MinBlem (equal to 1 if the coin has a minor defect)
+
+* MajBlem (equal to 1 if the coin has a major defect)
+
+* LargNeg (equal to 1 if the seller received a lot of negative feedback from
+customers)
+
+* LogBook (logarithm of the book value of the auctioned coin according to
+expert sellers. Standardized)
+
+* MinBidShare (ratio of the minimum selling price (starting price) to the book
+value. Standardized).
+
+
+## a)
+
+Obtain the maximum likelihood estimator of $\beta$ in the Poisson regression model
+for the eBay data [Hint: glm.R, don't forget that glm() adds its own intercept
+so don't input the covariate Const]. Which covariates are signifcant?
+
+```{r}
+coins <- read.table('eBayNumberOfBidderData_2024.dat', header=TRUE)
+
+
+mle <- glm(nBids ~ .-Const, data = coins, family = poisson)
+summary(mle)
+```
+VerfyID, Sealed, LogBook and MinBidShare and MajBlem are significant on a 99% significance level. 
+
+
+
+## b)
+
+Let's do a Bayesian analysis of the Poisson regression. Let the prior be $\beta \sim N[0,100\cdot(X^TX)^{-1}]$ , where X is the n x p covariate matrix. This is a commonly used prior, which is called Zellner's g-prior. Assume first that the posterior density is approximately multivariate normal:
+
+$$\beta|y \sim N(\hat\beta, J_y^{-1}(\hat\beta))$$
+
+where $\hat\beta$ is the posterior mode and $J_y(\hat\beta)$ is the negative hessian at the posterior mode.$\hat\beta$ and $J_y(\hat\beta)$ can be obtained by numerical optimization(optim.R) exactly like youve already did for the first logistic regression in Lab 2 (but with the log posterior function replaced by the corresponding one for the Poisson model, which you have code up.).
+
+```{r}
+library(mvtnorm)
+
+y <- as.matrix(coins[,1])
+X <- as.matrix(coins[,-1])
+
+n <- nrow(X)
+p <- ncol(X)
+Xnames <- colnames(X)
+
+# prior
+mu <- as.matrix(rep(0,p))
+Sigma <- as.matrix(100*(solve(t(X) %*% X)))
+
+poissonPost <- function(betas,y,X,mu,Sigma){
+  
+  linPred <- X%*%betas;
+  logLik <- sum(linPred*y - exp(linPred)) # poisson likelihood
+  logPrior <- dmvnorm(betas, mu, Sigma, log=TRUE);
+  
+  if (abs(logLik) == Inf) logLik = -20000; 
+ 
+  return(logLik + logPrior)
+}
+
+# Select the initial values for beta
+initVal <- matrix(0,p,1)
+
+# The argument control is a list of options to the optimizer optim, where fnscale=-1 means 
+# that we minimize the negative log posterior. Hence, we maximize the log posterior.  
+OptimRes <- optim(initVal,poissonPost,gr=NULL,y,X,mu,Sigma,method=c("BFGS"),
+                  control=list(fnscale=-1),hessian=TRUE)
+
+# Printing the results to the screen
+names(OptimRes$par) <- Xnames # Naming the coefficient by covariates
+approxPostStd <- sqrt(diag(solve(-OptimRes$hessian))) # Computing approximate standard deviations.
+names(approxPostStd) <- Xnames # Naming the coefficient by covariates
+```
+
+The posterior mode is:
+```{r}
+print(OptimRes$par[1:9])
+```
+
+The approximate posterior standard deviation is:
+```{r}
+print(approxPostStd)
+```
+MLE coefficients:
+```{r}
+coef(mle)
+```
+Compared to the MLE coefficients, the resulting approximate posterior mode coefficients are very similar. 
+
+
+
+## c) 
+
+Let's simulate from the actual posterior of $\beta$ using the Metropolis algorithm
+and compare the results with the approximate results in b). Program a general
+function that uses the Metropolis algorithm to generate random draws from an
+arbitrary posterior density. In order to show that it is a general function for
+any model, we denote the vector of model parameters by $\theta$. Let the proposal
+density be the multivariate normal density mentioned in Lecture 8 (random
+walk Metropolis):
+
+$$\theta_p|\theta^{(i-1)} \sim N(\theta^{(i-1)}, c \cdot \Sigma)$$
+
+
+$\Sigma = J_y^{-1}(\hat\beta)$ was obtained in b). The value c is a tuning parameter and
+should be an input to your Metropolis function. The user of your Metropolis function should be able to supply her own posterior density function, not
+necessarily for the Poisson regression, and still be able to use your Metropolis
+function. This is not so straightforward, unless you have come across function objects in R. The note HowToCodeRWM.pdf in Lisam describes how you can do this in R.
+
+Now, use your new Metropolis function to sample from the posterior of $\beta$
+in the Poisson regression for the eBay dataset. Assess MCMC convergence by
+graphical methods
+
+* Program general function object that uses the Metropolis algorithm to generate random draws from an arbitrary posterior density
+
+\pagebreak
+```{r}
+# theta is a vector of model parameters for which posterior density is evaluated, must be first argument
+# logPostFunc is function object that computes log posterior density at any value of parameter vector
+# C is tuning parameter
+# Sigma is approximate posterior std deviation, J^(-1)_y(Beta)
+
+RWMSampler <- function(theta, logPostFunc, C, postSigma, its, y, X, mu, priorSigma){
+  
+  n <- its # iterations
+  
+  theta0 <- matrix(theta, nrow = ncol(priorSigma), ncol = 1) # initial matrix of theta
+  
+  theta1 <- matrix(nrow = n, ncol = ncol(priorSigma)) # accepted thetas
+  colnames(theta1) <- colnames(X)
+  
+  # propsal density is multivariate normal (random walk metropolis)
+  theta1[1,] <- rmvnorm(1, mean = theta0, sigma = C * postSigma)
+  
+  for(i in 2:n){
+     
+     # theta_(i-1) is set to the previous value of proposed theta
+     theta0 <- c(as.numeric(theta1[i-1,]))
+     
+     # theta_p | theta_(i-1) is calculated
+     theta_p <- rmvnorm(1, mean = theta0, sigma = C * postSigma)
+     
+     theta_p <- c(theta_p)
+     
+     # ratio of Metropolis posterior acceptance ratio = exp[log p(theta_p | y) - log p(theta^(i-1) | y)]
+     ratio <- exp(logPostFunc(theta_p, y, X, mu, priorSigma) - logPostFunc(theta0, y, X, mu, priorSigma))
+     
+     # acceptance probability
+     alpha <- min(1, ratio)
+     
+     
+     if(alpha > runif(1,0,1)){
+       theta1[i,] <- theta_p
+       
+     } else {
+       theta1[i,] <- theta0
+     }
+  }
+  
+  return(theta1)
+}
+```
+
+* Use Metropolis function to sample from posterior of $\beta$ in the Poisson regression. Assess MCMC convergence graphically.
+```{r}
+library(ggplot2)
+
+# whole hessian instead of only diag for estimating sigma
+covariancePost <- solve(-OptimRes$hessian)
+
+set.seed(1234567890)
+metropolisRW <- RWMSampler(theta = 0, logPostFunc = poissonPost, C = 0.5, 
+                           postSigma = covariancePost,
+                           priorSigma = Sigma, 
+                           its = 5000, y = y, X = X, mu = mu)
+
+# Combine the beta_samples data into a data frame suitable for ggplot
+mp <- data.frame(iteration = rep(seq_len(nrow(metropolisRW)), ncol(metropolisRW)),
+                 value = c(metropolisRW),
+                 parameter = rep(names(coins)[-1], each= nrow(metropolisRW)))
+
+ # creating several line plots
+plots_mp<- ggplot(mp, aes(x = iteration, y = value)) +
+  geom_line() +
+  facet_wrap(~ parameter, scales = "free_y") +
+  labs(x = "Iteration",y='') +
+  theme_bw()
+
+# Print the plots
+print(plots_mp)
+```
+The MCMC draws seems to converge after a short burn in phase for all variables. You can see in the graph how the sampling works, where the line can be flat due to the random uniform draw is low so the value is not updated.
+
+```{r}
+metropolisRW[1000,]
+```
+The coefficient values for the last draw is similar to the previous GLM and approximate posterior modes, albeit slightly different.
+
+## d)
+
+Use the MCMC draws from c) to simulate from the predictive distribution of
+the number of bidders in a new auction with the characteristics below. Plot
+the predictive distribution. What is the probability of no bidders in this new
+auction?
+
+* PowerSeller = 1
+* VerifyID = 0
+* Sealed = 1
+* MinBlem = 0
+* MajBlem = 1
+* LargNeg = 0
+* LogBook = 1.2
+* MinBidShare = 0.8
+
+```{r}
+set.seed(1234567890)
+
+# constant + new bidder values
+newBidder <- as.matrix(c(1,1,0,1,0,1,0,1.2,0.8))
+
+pred <- c()
+for(i in 1:nrow(metropolisRW)){
+  # calculate lambda for poisson regression model
+  # and create vector of predictive values from random walk function
+  lambda <- exp(newBidder %*% metropolisRW[i,])
+  pred[i] <- rpois(1,lambda)
+  
+}
+
+hist(pred, freq = FALSE)
+
+table(pred)[1]/1000
+```
+
+
+The resulting distribution of predicted bidders follows a Poisson distribution which is expected. A total of 57 predictions for no bidders, which equals a probability of 343/1000 = 0.343 = 34.3% of no one bidding. 
+
+# Time series models in Stan
+
+## a) 
+
+Write a function in R that simulates data from the AR(1)-process
+
+$$ x _t = \mu + \phi (x_{t-1}- \mu) + \epsilon_t, \epsilon_t \overset{iid}\sim N(0,\sigma^2)$$
+
+
+for given values of $\mu, \phi \text{ and } \sigma^2$. Start the process at x1 = $\mu$ and then simulate
+values for xt for t = 2,3...T and return the vector x1:T containing all time
+points. Use $\mu$ = 9, $\sigma^2$ = 4 and T = 250 and look at some different realizations
+(simulations) of x1:T for values of $\phi$ between −1 and 1 (this is the interval
+of  $\phi$  where the AR(1)-process is stationary). Include a plot of at least one
+realization in the report. What effect does the value of  $\phi$  have on $x_{1:T}$ 
+
+
+```{r}
+
+mu <- 9
+sigma <- 4
+phi <- seq(-1,1,by=0.1)
+xmat <- matrix(mu,ncol=length(phi), nrow=250)
+
+for (j in 1:length(phi)){# looping over different phi values
+  for (i in 2:250){ # looping over all time stamps
+  xmat[i,j] <- mu + phi[j]*(xmat[(i-1),j] - mu) + rnorm(1,0,sqrt(sigma))   
+}
+}
+
+plot(x=c(1:250), y=xmat[,1],type='l')
+lines(xmat[,21], col='red')
+```
+
+The value of phi makes how xt should depend on the previous value, positive/negative autocorrelation, we can see that -1(black line) creates the time serie that goes from positive to negative every other value which indicates negative autocorrelation and that phi = 1 makes the red line where the values follow each other closly and have a high autocorrelation.
+
+## b)
+
+Use your function from a) to simulate two AR(1)-processes, x1:T with $\phi$ = 0.3
+and y1:T with$\phi$ = 0.97. Now, treat your simulated vectors as synthetic data,
+and treat the values of $\mu$, $\phi$ and $\sigma^2$ as unknown parameters. Implement Stancode that samples from the posterior of the three parameters, using suitable
+non-informative priors of your choice. [Hint: Look at the time-series models
+examples in the Stan user's guide/reference manual, and note the different
+parameterization used here.]
+
+* Report the posterior mean, 95% credible intervals and the number of effective posterior samples for the three inferred parameters for each of thesimulated AR(1)-process. Are you able to estimate the true values?
+
+* For each of the two data sets, evaluate the convergence of the samplers and plot the joint posterior of $\mu$ and $\phi$. Comments?
+
+
+
+```{r}
+set.seed(123456789)
+
+mu <- 9
+sigma <- 4
+phi2 <- c(0.3,0.97)
+xmat <- matrix(mu,ncol=2, nrow=250)
+
+for (j in 1:length(phi2)){# looping over different phi values
+  for (i in 2:250){ # looping over all time stamps
+  xmat[i,j] <- mu + phi2[j]*(xmat[(i-1),j] - mu) + rnorm(1,0,sqrt(sigma)) 
+}
+}
+
+plot(x=c(1:250), y=xmat[,2],type='l', main='The two time series, red is phi =0.3')
+lines(xmat[,1], col='red')
+```
+
+
+```{r}
+# stan model phi = 0.3, code from slides (changed)
+
+y=xmat[,1]
+N=length(y)
+
+
+StanModel = '
+data {
+  int<lower=0> N; // Number of observations
+  real y[N];
+}
+parameters {
+  real mu;
+  real<lower=-1,upper=1> phi; // creating phi with the interval -1,1
+  real<lower=0> sigma2;
+}
+model {
+  mu ~ normal(9,20); // Normal with mean 9, st.dev. 20
+  phi ~ uniform(-1,1); //  uniform in the interal
+  sigma2 ~ scaled_inv_chi_square(1,2); // Scaled-inv-chi2 with nu 1,sigma 2
+  for(i in 2:N){
+    y[i] ~ normal(mu + phi * (y[i-1] - mu),sqrt(sigma2));
+  }
+}'
+```
+
+
+
+
+```{r, message=FALSE}
+data <- list(N=N, y=y)
+warmup <- 1000
+niter <- 2000
+fit <- stan(model_code=StanModel,data=data, warmup=warmup,iter=niter,chains=4)
+# Print the fitted model
+#print(fit,digits_summary=3)
+fitsum <- summary(fit)$summary[c(1,2,3),c(1,4,8,9)]
+# Extract posterior samples
+
+# Do traceplots of the first chain
+#par(mfrow = c(1,1))
+#plot(postDraws$mu[1:(niter-warmup)],type="l",ylab="mu",main="Traceplot")
+# Do automatic traceplots of all chains
+#traceplot(fit)
+# Bivariate posterior plots
+#pairs(fit)
+knitr::kable(fitsum,caption = 'phi = 0.3')
+
+```
+
+The posterior mean for mu, phi and sigma are close to the true values for the time serie, and all parameters have over 3500 efficient draws. 
+
+
+
+```{r}
+# stan model phi = 0.97
+
+y=xmat[,2]
+N=length(y)
+
+
+StanModel = '
+data {
+  int<lower=0> N; // Number of observations
+  real y[N];
+}
+parameters {
+  real mu;
+  real<lower=-1,upper=1> phi; // creating phi with the interval -1,1
+  real<lower=0> sigma2;
+}
+model {
+  mu ~ normal(9,20); // Normal with mean 9, st.dev. 20
+  phi ~ uniform(-1,1); //  uniform in the interal
+  sigma2 ~  scaled_inv_chi_square(1,2); // Scaled-inv-chi2 with nu 1,sigma 2
+  for(i in 2:N){
+    y[i] ~ normal(mu + phi * (y[i-1] - mu),sqrt(sigma2));
+  }
+}'
+```
+
+
+```{r}
+data <- list(N=N, y=y)
+warmup <- 1000
+niter <- 2000
+fit2 <- stan(model_code=StanModel,data=data, warmup=warmup,iter=niter,chains=4)
+# Print the fitted model
+fit2sum <- summary(fit2)$summary[c(1,2,3),c(1,4,8,9)]
+
+knitr::kable(fit2sum,caption = 'phi = 0.97')
+```
+
+The time serie with phi = 0.97 also have posterior means close to the true values but the credible interval for mu is much wider and even cover 0, but the other credible intervals are tighter. The number of efficient draws is also much lower for this value of phi, this has to do with the correlation between phi and mu when phi has a high value. As phi = 0.97 every draw will change more and will also be dependent on the drawn mu, this might explain the high variance for mu.
+
+
+
+```{r}
+# Do traceplots 
+
+traceplot(fit, warmup=TRUE, nrow=3)
+```
+
+```{r}
+# eval convergence
+postDraws2 <- extract(fit2)
+# Do traceplots of the  chain
+
+traceplot(fit2, warmup=TRUE, nrow=3)
+```
+
+Looking at the traceplots for the parameters for the two time series we can see that all parameters seems to converge quickly as they go close and vary around the true value after very few iterations. Whats notable is that mu for the timeserie with phi = 0.97 is that this vary much more than all other parameters and it also seems to have some outliers here and there.
+
+
+
+
+```{r}
+# joint posterior of phi = 0.3
+postDraws <- extract(fit)
+plot(postDraws$mu,y=postDraws$phi, type='p', ylab='phi', xlab='mu')
+```
+
+The values for phi and mu are close to the center which has the highest density and are where the true values also are. There doesn't look like there is any correlation between phi and mu, as there isnt any clear pattern.  
+
+
+```{r}
+# joint posterior of phi = 0.97
+postDraws2 <- extract(fit2)
+plot(postDraws2$mu,y=postDraws2$phi, type='p', ylab='phi', xlab='mu')
+```
+
+For phi = 0.97 we have a upper bound where phi cant go over 1 so we get a border for phi there, but we can see that the values for phi centered around its posterior mean of 0.985. The variance for mu is large and the pattern of we can see with the downward and upward trend is the high autocorrelation, a negative value will be followed by a negative and a positive with a positive etc. 
+
+
+\pagebreak
+# Appendix
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
