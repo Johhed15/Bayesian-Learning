@@ -381,17 +381,17 @@ graphical methods
 # C is tuning parameter
 # Sigma is approximate posterior std deviation, J^(-1)_y(Beta)
 
-RWMSampler <- function(theta, logPostFunc, C, Sigma, its, y, X, mu){
+RWMSampler <- function(theta, logPostFunc, C, postSigma, its, y, X, mu, priorSigma){
   
   n <- its # iterations
   
-  theta0 <- matrix(theta, nrow = ncol(diag(Sigma)), ncol = 1) # initial matrix of theta
+  theta0 <- matrix(theta, nrow = ncol(priorSigma), ncol = 1) # initial matrix of theta
   
-  theta1 <- matrix(nrow = n, ncol = ncol(diag(Sigma))) # accepted thetas
+  theta1 <- matrix(nrow = n, ncol = ncol(priorSigma)) # accepted thetas
   colnames(theta1) <- colnames(X)
   
   # propsal density is multivariate normal (random walk metropolis)
-  theta1[1,] <- rmvnorm(1, mean = theta0, sigma = C * diag(Sigma))
+  theta1[1,] <- rmvnorm(1, mean = theta0, sigma = C * postSigma)
   
   for(i in 2:n){
      
@@ -399,12 +399,12 @@ RWMSampler <- function(theta, logPostFunc, C, Sigma, its, y, X, mu){
      theta0 <- c(as.numeric(theta1[i-1,]))
      
      # theta_p | theta_(i-1) is calculated
-     theta_p <- rmvnorm(1, mean = theta0, sigma = C * diag(Sigma))
+     theta_p <- rmvnorm(1, mean = theta0, sigma = C * postSigma)
      
      theta_p <- c(theta_p)
      
      # ratio of Metropolis posterior acceptance ratio = exp[log p(theta_p | y) - log p(theta^(i-1) | y)]
-     ratio <- exp(logPostFunc(theta_p, y, X, mu, diag(Sigma)) - logPostFunc(theta0, y, X, mu, diag(Sigma)))
+     ratio <- exp(logPostFunc(theta_p, y, X, mu, priorSigma) - logPostFunc(theta0, y, X, mu, priorSigma))
      
      # acceptance probability
      alpha <- min(1, ratio)
@@ -424,10 +424,16 @@ RWMSampler <- function(theta, logPostFunc, C, Sigma, its, y, X, mu){
 
 * Use Metropolis function to sample from posterior of $\beta$ in the Poisson regression. Assess MCMC convergence graphically.
 ```{r}
+library(ggplot2)
+
+# whole hessian instead of only diag for estimating sigma
+covariancePost <- solve(-OptimRes$hessian)
 
 set.seed(1234567890)
-metropolisRW <- RWMSampler(theta = 0, logPostFunc = poissonPost, C = 0.2, Sigma = approxPostStd, 
-                                    its = 1000, y = y, X = X, mu = mu)
+metropolisRW <- RWMSampler(theta = 0, logPostFunc = poissonPost, C = 0.5, 
+                           postSigma = covariancePost,
+                           priorSigma = Sigma, 
+                           its = 5000, y = y, X = X, mu = mu)
 
 # Combine the beta_samples data into a data frame suitable for ggplot
 mp <- data.frame(iteration = rep(seq_len(nrow(metropolisRW)), ncol(metropolisRW)),
@@ -488,7 +494,7 @@ table(pred)[1]/1000
 ```
 
 
-The resulting distribution of predicted bidders follows a Poisson distribution which is expected. A total of 57 predictions for no bidders, which equals a probability of 57/1000 = 0.057 = 5.7% of no one bidding. 
+The resulting distribution of predicted bidders follows a Poisson distribution which is expected. A total of 57 predictions for no bidders, which equals a probability of 343/1000 = 0.343 = 34.3% of no one bidding. 
 
 # Time series models in Stan
 
